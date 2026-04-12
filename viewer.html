@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>빅드림 스코어보드 - 뷰어</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        /* 프리즘 앱에서 투명하게 보이도록 배경 투명 처리 */
+        body { margin: 0; padding: 20px; font-family: 'Arial', sans-serif; background-color: transparent; color: white; }
+        .scoreboard {
+            background-color: rgba(0, 0, 0, 0.7); /* 반투명 검은색 배경 */
+            border-radius: 10px; padding: 15px; width: 350px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+        .header { text-align: center; font-size: 1.2rem; font-weight: bold; margin-bottom: 10px; color: #ffd700; }
+        .teams { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .team { text-align: center; flex: 1; }
+        .team-name { font-size: 1.2rem; font-weight: bold; margin-bottom: 5px; }
+        .score { font-size: 2.5rem; font-weight: bold; }
+        .vs { font-size: 1.2rem; margin: 0 10px; color: #aaa; }
+        .bso { background-color: rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 8px; font-size: 1.1rem; }
+        .bso span { margin-right: 15px; font-weight: bold; }
+        .b-color { color: #4CAF50; } /* 볼 - 초록 */
+        .s-color { color: #ffeb3b; } /* 스트라이크 - 노랑 */
+        .o-color { color: #f44336; } /* 아웃 - 빨강 */
+    </style>
+</head>
+<body>
+
+    <div class="scoreboard">
+        <div class="header" id="inning-display">1회 초</div>
+        
+        <div class="teams">
+            <div class="team">
+                <div class="team-name">빅드림</div>
+                <div class="score" id="score-home">0</div>
+            </div>
+            <div class="vs">VS</div>
+            <div class="team">
+                <div class="team-name" id="away-name">상대팀</div>
+                <div class="score" id="score-away">0</div>
+            </div>
+        </div>
+
+        <div class="bso">
+            <span class="b-color">B <span id="ball-display">0</span></span>
+            <span class="s-color">S <span id="strike-display">0</span></span>
+            <span class="o-color">O <span id="out-display">0</span></span>
+        </div>
+    </div>
+
+    <script>
+        // 고유 ID를 지정하여 컨트롤러가 쉽게 찾아올 수 있도록 설정 (고유한 값으로 변경 가능)
+        const peer = new Peer('bigdream-baseball-viewer'); 
+
+        peer.on('open', (id) => {
+            console.log('뷰어 대기 중. ID: ' + id);
+        });
+
+        // 컨트롤러(리모컨)로부터 데이터가 들어오면 화면 업데이트
+        peer.on('connection', (conn) => {
+            conn.on('data', (data) => {
+                document.getElementById('score-home').innerText = data.home;
+                document.getElementById('score-away').innerText = data.away;
+                document.getElementById('inning-display').innerText = data.inning;
+                document.getElementById('ball-display').innerText = data.ball;
+                document.getElementById('strike-display').innerText = data.strike;
+                document.getElementById('out-display').innerText = data.out;
+            });
+        });
+    </script>
+</body>
+</html>
