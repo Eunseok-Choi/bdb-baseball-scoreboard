@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>리모컨 - 빅드림 스코어보드</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; text-align: center; background-color: #f0f0f0; }
+        .control-group { background: white; margin-bottom: 15px; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        button { font-size: 1.2rem; padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; background: #007bff; color: white; cursor: pointer; }
+        button:active { background: #0056b3; }
+        .danger { background: #dc3545; }
+        h3 { margin-top: 0; }
+        #status { color: red; font-weight: bold; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>점수판 리모컨</h2>
+    <div id="status">🔴 방송 화면(뷰어)에 연결 중...</div>
+
+    <div class="control-group">
+        <h3>점수</h3>
+        빅드림: <button onclick="updateData('home', 1)">+1</button> <button onclick="updateData('home', -1)">-1</button><br>
+        상대팀: <button onclick="updateData('away', 1)">+1</button> <button onclick="updateData('away', -1)">-1</button>
+    </div>
+
+    <div class="control-group">
+        <h3>볼카운트 (BSO)</h3>
+        Ball: <button onclick="updateData('ball', 1)">+1</button> <button onclick="updateData('ball', -1)">-1</button><br>
+        Strike: <button onclick="updateData('strike', 1)">+1</button> <button onclick="updateData('strike', -1)">-1</button><br>
+        Out: <button onclick="updateData('out', 1)">+1</button> <button onclick="updateData('out', -1)">-1</button><br>
+        <button class="danger" onclick="resetBSO()">BSO 초기화</button>
+    </div>
+
+    <div class="control-group">
+        <h3>이닝 텍스트 직접 입력</h3>
+        <input type="text" id="inning-input" value="1회 초" style="font-size: 1.2rem; padding: 5px;">
+        <button onclick="updateData('inning', document.getElementById('inning-input').value)">적용</button>
+    </div>
+
+    <script>
+        const peer = new Peer();
+        let conn;
+
+        // 현재 스코어 상태 저장
+        let gameData = {
+            home: 0, away: 0,
+            inning: '1회 초',
+            ball: 0, strike: 0, out: 0
+        };
+
+        peer.on('open', (id) => {
+            // 뷰어 파일에 하드코딩해둔 ID로 연결
+            conn = peer.connect('bigdream-baseball-viewer'); 
+            
+            conn.on('open', () => {
+                document.getElementById('status').innerText = '🟢 송출 화면에 연결됨!';
+                document.getElementById('status').style.color = 'green';
+                sendData(); // 연결되자마자 초기값 한 번 전송
+            });
+        });
+
+        function updateData(key, value) {
+            if (key === 'inning') {
+                gameData[key] = value;
+            } else {
+                gameData[key] += value;
+                if (gameData[key] < 0) gameData[key] = 0; // 음수 방지
+                if (key === 'ball' && gameData.ball > 3) gameData.ball = 0;
+                if (key === 'strike' && gameData.strike > 2) gameData.strike = 0;
+                if (key === 'out' && gameData.out > 2) gameData.out = 0;
+            }
+            sendData();
+        }
+
+        function resetBSO() {
+            gameData.ball = 0; gameData.strike = 0; gameData.out = 0;
+            sendData();
+        }
+
+        function sendData() {
+            if (conn && conn.open) {
+                conn.send(gameData);
+            }
+        }
+    </script>
+</body>
+</html>
