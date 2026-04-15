@@ -2,37 +2,42 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>라인업 뷰어</title>
+    <title>라인업 뷰어 - 가로 고정형</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: transparent; overflow: hidden; font-family: -apple-system, sans-serif; color: white; padding: 10px; }
+        body { margin: 0; background: transparent; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; padding: 10px; }
         
-        /* 스코어보드와 동일한 테마 적용 */
+        /* 스코어보드(360px)와 너비를 맞춤 */
         .lineup-container {
-            display: inline-block; /* 텍스트 길이에 맞춰 늘어남 */
-            background: rgba(0, 0, 0, 0.9);
+            width: 360px; 
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.8);
             border-radius: 8px;
-            padding: 8px 16px;
+            padding: 10px 15px;
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
             border: 1px solid #444;
-            font-size: 22px;
-            font-weight: 800;
-            white-space: nowrap; /* 줄바꿈 방지 */
-            letter-spacing: -0.5px;
+            
+            /* 텍스트 스타일 */
+            font-size: 17px; /* 기존 22px에서 축소 */
+            font-weight: 700;
+            white-space: pre; /* 공백(띄어쓰기)을 그대로 유지 */
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
         }
-        
-        .highlight { color: #FFD700; } /* 안타, 홈런 등 강조색 */
-        .dim { color: #aaa; } /* 삼진, 뜬공 등 보조색 */
+
+        #lineup-text {
+            letter-spacing: -0.2px;
+        }
     </style>
 </head>
 <body>
 
-<div class="lineup-container" id="lineup-box">
-    <span id="lineup-text">대기 중...</span>
+<div class="lineup-container">
+    <span id="lineup-text">라인업 대기 중...</span>
 </div>
 
 <script>
-    // 스코어보드와 혼선되지 않도록 라인업 전용 ID 사용
     const MY_ID = 'jiho-papa-lineup-viewer'; 
     const peer = new Peer(MY_ID);
 
