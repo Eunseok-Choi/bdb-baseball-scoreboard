@@ -3,101 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>빅드림 스코어보드 - 뷰어</title>
+    <title>빅드림 스코어보드 v3 - 뷰어</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        /* 프리즘 앱에서 투명하게 보이도록 배경 투명 처리 및 하단 고정 */
-        body { margin: 0; font-family: 'Arial', sans-serif; background-color: transparent; position: fixed; bottom: 0; left: 0; width: 100%; }
+        /* 프리즘 앱에서 투명하게 보이도록 배경 투명 처리 및 상단 고정 */
+        body { margin: 0; padding: 20px; font-family: 'Arial', sans-serif; background-color: transparent; position: fixed; top: 0; left: 0; width: 100%; display: flex; justify-content: center; }
         
-        .bottom-bar {
-            display: flex; height: 100px; /* 적당한 높이로 설정 */
-            border-top: 2px solid #555;
-            box-shadow: 0 -4px 8px rgba(0,0,0,0.5);
+        /* 전체 상단 바 컨테이너 */
+        .top-bar-container {
+            display: flex; flex-direction: column; 
+            width: 700px; /* 적당한 가로 폭 */
+            background-color: rgba(0, 0, 0, 0.7); /* 반투명 검은색 배경 */
+            border-radius: 10px; padding: 10px 15px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            color: white;
         }
 
-        /* 왼쪽 타자 정보 섹션 (흰색 배경) */
-        .section-batter {
-            background-color: white; color: black;
-            flex: 1; padding: 10px; display: flex; flex-direction: column; justify-content: center;
-        }
-        .batter-info { font-size: 1rem; margin-bottom: 5px; }
-        .batter-result { font-size: 0.9rem; color: #555; }
+        /* 첫 번째 행: 팀 이름 및 스코어 (3 - 2 형식) */
+        .top-row { display: flex; justify-content: space-around; align-items: center; margin-bottom: 10px; font-weight: bold; font-size: 1.3rem; }
+        .team-name-viewer { flex: 1; text-align: center; }
+        .score-display-viewer { flex: 1; text-align: center; font-size: 2rem; font-weight: bold; }
 
-        /* 중앙 팀 및 점수 섹션 (파란색, 노란색 배경) */
-        .section-teams { display: flex; flex: 2; height: 100%; }
-        .team { flex: 1; height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-weight: bold; font-size: 1.3rem; }
+        /* 두 번째 행: 베이스, BSO, 이닝 */
+        .bottom-row { display: flex; align-items: flex-start; }
         
-        .home-team { background-color: #00bcd4; color: white; } /* 빅드림 */
-        .away-team { background-color: #ffd600; color: black; } /* 상대팀 */
-        
-        .score { font-size: 2rem; font-weight: bold; }
-        
-        /* 오른쪽 카운트 및 베이스 섹션 (검은색 배경) */
-        .section-count {
-            background-color: black; color: white;
-            flex: 2; padding: 10px; display: flex; justify-content: space-between; align-items: center;
-        }
-        .inning { font-size: 1.2rem; margin-right: 15px; }
-        
-        /* 베이스 현황 (다이아몬드 SVG 사용) */
-        .bases-svg { width: 50px; height: 50px; margin-right: 15px; }
-        .base { fill: transparent; stroke: #888; stroke-width: 2; }
-        .base.filled { fill: #ffd600; stroke: #ffd600; } /* 차있는 베이스는 노란색 */
-        
-        /* BSO 카운트 (원형 SVG 사용) */
-        .bso-container { display: flex; align-items: center; }
-        .bso-svg { width: 30px; height: 30px; margin: 0 5px; }
-        .count-circle { fill: transparent; stroke: white; stroke-width: 2; }
-        .count-circle.filled-b { fill: #4CAF50; stroke: #4CAF50; } /* 볼 - 초록 */
-        .count-circle.filled-s { fill: #ffeb3b; stroke: #ffeb3b; } /* 스트라이크 - 노랑 */
-        .count-circle.filled-o { fill: #f44336; stroke: #f44336; } /* 아웃 - 빨강 */
+        /* 베이스 현황 (image_3.png처럼 다이아몬드 SVG 사용) */
+        .bases-viewer-container { flex: 1; display: flex; justify-content: center; align-items: center; }
+        .bases-svg-v3 { width: 120px; height: 120px; }
+        .base-v3 { fill: transparent; stroke: white; stroke-width: 3; }
+        .base-v3.filled { fill: #ffd600; stroke: #ffd600; } /* 차있는 베이스는 노란색 */
+
+        /* BSO 카운트 (vertical stack, image_2.png 스타일) */
+        .bso-stack-viewer { flex: 2; display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; margin-left: 20px; font-weight: bold; font-size: 1.1rem; }
+        .counter-row-viewer { display: flex; align-items: center; margin-bottom: 5px; }
+        .circle-container-viewer { display: flex; align-items: center; margin-left: 10px; }
+        .bso-circle-v { width: 30px; height: 30px; margin: 0 5px; }
+        .count-circle-v { fill: #aaaaaa; stroke: white; stroke-width: 2; } /* 기본 grey */
+        .count-circle-v.filled-b-v { fill: #4CAF50; stroke: #4CAF50; } /* 볼 - 초록 */
+        .count-circle-v.filled-s-v { fill: #ffeb3b; stroke: #ffeb3b; } /* 스트라이크 - 노랑 */
+        .count-circle-v.filled-o-v { fill: #f44336; stroke: #f44336; } /* 아웃 - 빨강 */
+
+        /* 이닝 (숫자 및 삼각형) */
+        .inning-viewer-container { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; font-weight: bold; font-size: 1.2rem; }
+        .inning-number-viewer { font-size: 1.5rem; margin-bottom: 5px; }
+        .inning-arrow-viewer { width: 40px; height: 40px; }
+        .inning-triangle { fill: #f44336; stroke: #f44336; stroke-width: 2; }
 
     </style>
 </head>
 <body>
 
-    <div class="bottom-bar">
-        <div class="section-batter">
-            <div class="batter-info" id="batter-info-display"></div>
-            <div class="batter-result" id="batter-result-display"></div>
+    <div class="top-bar-container">
+        <div class="top-row">
+            <div class="team-name-viewer" id="team-a-viewer">팀이름</div>
+            <div class="score-display-viewer" id="score-viewer">0 - 0</div>
+            <div class="team-name-viewer" id="team-b-viewer">팀이름</div>
         </div>
         
-        <div class="section-teams">
-            <div class="team home-team">
-                <span class="team-name">빅드림</span>
-                <span class="score" id="score-home">0</span>
-            </div>
-            <div class="team away-team">
-                <span class="score" id="score-away">0</span>
-                <span class="team-name" id="away-name-display">상대팀</span>
-            </div>
-        </div>
-        
-        <div class="section-count">
-            <div style="display: flex; align-items: center;">
-                <span class="inning" id="inning-display">1회 초</span>
-                
-                <svg class="bases-svg" viewBox="0 0 100 100">
-                    <polygon id="base-1" class="base" points="50,10 90,50 50,90 10,50"/> <polygon id="base-2" class="base" points="10,50 50,10 90,50 50,90"/> <polygon id="base-3" class="base" points="50,90 10,50 50,10 90,50"/> </svg>
+        <div class="bottom-row">
+            <div class="bases-viewer-container">
+                <svg class="bases-svg-v3" viewBox="0 0 200 200">
+                    <polygon id="base-v3-filled" class="base-v3" points="100,20 180,100 100,180 20,100"/> </svg>
             </div>
             
-            <div class="bso-container">
-                B 
-                <svg class="bso-svg" viewBox="0 0 40 40"><circle id="b-1" class="count-circle" cx="20" cy="20" r="18"/></svg>
-                <svg class="bso-svg" viewBox="0 0 40 40"><circle id="b-2" class="count-circle" cx="20" cy="20" r="18"/></svg>
-                <svg class="bso-svg" viewBox="0 0 40 40"><circle id="b-3" class="count-circle" cx="20" cy="20" r="18"/></svg>
-                <span style="margin: 0 10px;"></span>
-                S
-                <svg class="bso-svg" viewBox="0 0 40 40"><circle id="s-1" class="count-circle" cx="20" cy="20" r="18"/></svg>
-                <svg class="bso-svg" viewBox="0 0 40 40"><circle id="s-2" class="count-circle" cx="20" cy="20" r="18"/></svg>
-                <span style="margin: 0 10px;"></span>
-                O
-                <svg class="bso-svg" viewBox="0 0 40 40"><circle id="o-1" class="count-circle" cx="20" cy="20" r="18"/></svg>
-                <svg class="bso-svg" viewBox="0 0 40 40"><circle id="o-2" class="count-circle" cx="20" cy="20" r="18"/></svg>
+            <div class="bso-stack-viewer">
+                <div class="counter-row-viewer">
+                    <span>B</span>
+                    <div class="circle-container-viewer">
+                        <svg class="bso-circle-v" viewBox="0 0 40 40"><circle id="b-c-v-1" class="count-circle-v" cx="20" cy="20" r="18"/></svg>
+                        <svg class="bso-circle-v" viewBox="0 0 40 40"><circle id="b-c-v-2" class="count-circle-v" cx="20" cy="20" r="18"/></svg>
+                        <svg class="bso-circle-v" viewBox="0 0 40 40"><circle id="b-c-v-3" class="count-circle-v" cx="20" cy="20" r="18"/></svg>
+                    </div>
+                </div>
+                <div class="counter-row-viewer">
+                    <span>S</span>
+                    <div class="circle-container-viewer">
+                        <svg class="bso-circle-v" viewBox="0 0 40 40"><circle id="s-c-v-1" class="count-circle-v" cx="20" cy="20" r="18"/></svg>
+                        <svg class="bso-circle-v" viewBox="0 0 40 40"><circle id="s-c-v-2" class="count-circle-v" cx="20" cy="20" r="18"/></svg>
+                    </div>
+                </div>
+                <div class="counter-row-viewer">
+                    <span>O</span>
+                    <div class="circle-container-viewer">
+                        <svg class="bso-circle-v" viewBox="0 0 40 40"><circle id="o-c-v-1" class="count-circle-v" cx="20" cy="20" r="18"/></svg>
+                        <svg class="bso-circle-v" viewBox="0 0 40 40"><circle id="o-c-v-2" class="count-circle-v" cx="20" cy="20" r="18"/></svg>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="inning-viewer-container">
+                <div class="inning-number-viewer" id="inning-number-viewer">1</div>
+                <svg class="inning-arrow-viewer" viewBox="0 0 100 100" id="inning-arrow-container">
+                    <polygon id="inning-triangle-v" class="inning-triangle" points="50,15 90,85 10,85"/> </svg>
             </div>
         </div>
     </div>
 
     <script>
         // 고유 ID를 지정하여 컨트롤러가 쉽게 찾아올 수 있도록 설정 (고유한 값으로 변경 가능)
-        const peer = new Peer('bigdream-baseball-viewer-v2');
+        const peer = new Peer('bigdream-baseball-viewer-v3'); 
+
+        peer.on('open', (id) => {
+            console.log('뷰어 대기 중. ID: ' + id);
+        });
+
+        // 컨트롤러(리모컨)로부터 데이터가 들어오면 화면 업데이트
+        peer.on('connection', (conn) => {
+            conn.on('data', (data) => {
+                // 팀 이름 및 스코어
+                document.getElementById('team-a-viewer').innerText = data.teamAName;
+                document.getElementById('team-b-viewer').innerText = data.teamBName;
+                document.getElementById('score-viewer').innerText = `${data.teamAScore} - ${data.teamBScore}`;
+                
+                // 이닝
+                document.getElementById('inning-number-
