@@ -93,8 +93,8 @@
     </div>
     <div class="inning-ctrl">
         <div class="inning-text" id="disp-inning">1회 초</div>
-        <button class="btn-inning" onclick="changeInning(1)">다음 차례 ⏭</button>
-        <button class="btn-inning prev" onclick="changeInning(-1)">이전 차례 ⏮</button>
+        <button class="btn-inning" onclick="changeInning(1)">이닝 +</button>
+        <button class="btn-inning prev" onclick="changeInning(-1)">이닝 -</button>
     </div>
 </div>
 
@@ -209,6 +209,7 @@
             if(!state.isTop) state.isTop = true; 
             else { state.isTop = false; state.inning = Math.max(1, state.inning - 1); }
         }
+        resetBSO()
         send();
     }
 </script>
