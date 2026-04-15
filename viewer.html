@@ -5,56 +5,67 @@
     <title>야구 스코어보드 - 뷰어</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: transparent; overflow: hidden; font-family: 'Arial', sans-serif; color: white; }
+        body { margin: 0; background: transparent; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; }
+        
+        /* 스코어보드 고정 영역 */
         .main-container {
-            display: flex; flex-direction: column; width: 600px;
-            background: rgba(0, 0, 0, 0.8); border-radius: 15px; padding: 15px; margin: 20px;
+            width: 500px; /* 크기 고정 */
+            background: rgba(0, 0, 0, 0.9); /* 불투명도 대폭 상승 */
+            border-radius: 12px;
+            padding: 12px;
+            margin: 10px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            border: 1px solid #444;
         }
-        /* 상단: 팀 이름 및 점수 */
-        .score-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 0 20px; }
-        .team-box { flex: 1; text-align: center; font-size: 24px; font-weight: bold; }
-        .score-box { flex: 1; text-align: center; font-size: 48px; font-weight: bold; color: #FFD700; }
 
-        /* 하단: 베이스, BSO, 이닝 */
-        .info-row { display: flex; align-items: center; justify-content: space-around; }
+        /* 상단 점수 영역 */
+        .score-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 10px; }
+        .team-box { flex: 1.5; text-align: center; font-size: 20px; font-weight: 800; letter-spacing: -1px; }
+        .score-box { flex: 1; text-align: center; font-size: 36px; font-weight: 900; color: #FFD700; text-shadow: 2px 2px 4px black; }
+
+        /* 하단 정보 영역 */
+        .info-row { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; }
         
-        /* 베이스 (3개 다이아몬드) */
-        .bases-container { position: relative; width: 100px; height: 80px; }
-        .base { fill: none; stroke: white; stroke-width: 3; }
-        .base.on { fill: #FFD600; stroke: #FFD600; }
+        /* 조밀해진 베이스 */
+        .bases-container { width: 80px; height: 65px; }
+        .base { fill: none; stroke: #666; stroke-width: 4; transition: all 0.2s; }
+        .base.on { fill: #FFD600; stroke: #FFD600; filter: drop-shadow(0 0 5px #FFD600); }
         
-        /* BSO 스택 */
-        .bso-container { display: flex; flex-direction: column; gap: 5px; }
-        .count-row { display: flex; align-items: center; gap: 8px; font-weight: bold; font-size: 18px; }
-        .dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; background: #555; }
-        .dot.B.on { background: #4CAF50; border-color: #4CAF50; }
-        .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; }
-        .dot.O.on { background: #F44336; border-color: #F44336; }
+        /* 정밀해진 BSO */
+        .bso-container { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-left: 25px; }
+        .count-row { display: flex; align-items: center; gap: 6px; font-weight: 900; font-size: 16px; }
+        .label { width: 15px; }
+        .dot { width: 18px; height: 18px; border-radius: 50%; background: #333; border: 1.5px solid #555; transition: 0.2s; }
+        
+        /* BSO 색상 규정 */
+        .dot.B.on { background: #00FF41; border-color: #00FF41; box-shadow: 0 0 8px #00FF41; }
+        .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; box-shadow: 0 0 8px #FFEB3B; }
+        .dot.O.on { background: #FF3B30; border-color: #FF3B30; box-shadow: 0 0 8px #FF3B30; }
 
         /* 이닝 및 삼각형 */
-        .inning-box { text-align: center; display: flex; align-items: center; gap: 10px; font-size: 30px; font-weight: bold; }
-        .triangle { width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; }
-        .triangle.up { border-bottom: 25px solid #F44336; } /* 초 (공격) */
-        .triangle.down { border-top: 25px solid #F44336; } /* 말 (공격) */
+        .inning-box { width: 80px; text-align: center; display: flex; flex-direction: column; align-items: center; font-size: 22px; font-weight: 800; }
+        .triangle { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; margin-top: 4px; }
+        .triangle.up { border-bottom: 18px solid #FF3B30; } 
+        .triangle.down { border-top: 18px solid #FF3B30; }
     </style>
 </head>
 <body>
 
 <div class="main-container">
     <div class="score-row">
-        <div class="team-box" id="name-a">팀 A</div>
-        <div class="score-box"><span id="score-a">0</span> - <span id="score-b">0</span></div>
-        <div class="team-box" id="name-b">팀 B</div>
+        <div class="team-box" id="name-a">빅드림</div>
+        <div class="score-box"><span id="score-a">0</span> : <span id="score-b">0</span></div>
+        <div class="team-box" id="name-b">상대팀</div>
     </div>
 
     <div class="info-row">
         <svg class="bases-container" viewBox="0 0 100 80">
-            <polygon id="base2" class="base" points="50,5 65,25 50,45 35,25" /> <polygon id="base1" class="base" points="75,30 90,50 75,70 60,50" /> <polygon id="base3" class="base" points="25,30 40,50 25,70 10,50" /> </svg>
+            <polygon id="base2" class="base" points="50,10 62,25 50,40 38,25" /> <polygon id="base1" class="base" points="72,32 84,47 72,62 60,47" /> <polygon id="base3" class="base" points="28,32 40,47 28,62 16,47" /> </svg>
 
         <div class="bso-container">
-            <div class="count-row">B <div id="b1" class="dot"></div> <div id="b2" class="dot"></div> <div id="b3" class="dot"></div></div>
-            <div class="count-row">S <div id="s1" class="dot"></div> <div id="s2" class="dot"></div></div>
-            <div class="count-row">O <div id="o1" class="dot"></div> <div id="o2" class="dot"></div></div>
+            <div class="count-row"><span class="label">B</span> <div id="b1" class="dot B"></div> <div id="b2" class="dot B"></div> <div id="b3" class="dot B"></div></div>
+            <div class="count-row"><span class="label">S</span> <div id="s1" class="dot S"></div> <div id="s2" class="dot S"></div></div>
+            <div class="count-row"><span class="label">O</span> <div id="o1" class="dot O"></div> <div id="o2" class="dot O"></div></div>
         </div>
 
         <div class="inning-box">
@@ -65,11 +76,8 @@
 </div>
 
 <script>
-    // 본인의 고유한 ID를 만드세요 (영어+숫자 조합)
     const MY_ID = 'jiho-papa-live-viewer'; 
     const peer = new Peer(MY_ID);
-
-    peer.on('open', (id) => console.log('연결 대기 중... ID:', id));
 
     peer.on('connection', (conn) => {
         conn.on('data', (data) => {
@@ -78,17 +86,10 @@
             document.getElementById('score-a').innerText = data.scoreA;
             document.getElementById('score-b').innerText = data.scoreB;
             document.getElementById('inning-num').innerText = data.inning;
-            
-            // 이닝 화살표
-            const tri = document.getElementById('inning-tri');
-            tri.className = data.isTop ? 'triangle up' : 'triangle down';
-
-            // 베이스
+            document.getElementById('inning-tri').className = data.isTop ? 'triangle up' : 'triangle down';
             document.getElementById('base1').classList.toggle('on', data.base1);
             document.getElementById('base2').classList.toggle('on', data.base2);
             document.getElementById('base3').classList.toggle('on', data.base3);
-
-            // BSO
             for(let i=1; i<=3; i++) document.getElementById('b'+i)?.classList.toggle('on', data.b >= i);
             for(let i=1; i<=2; i++) document.getElementById('s'+i)?.classList.toggle('on', data.s >= i);
             for(let i=1; i<=2; i++) document.getElementById('o'+i)?.classList.toggle('on', data.o >= i);
