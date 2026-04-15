@@ -1,1 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>라인업 설정/리모컨</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: #121212; color: white; margin: 0; padding: 10px; touch-action: manipulation; }
+        
+        #status { text-align: center; font-size: 13px; font-weight: bold; color: #FF453A; margin-bottom: 10px; padding: 6px; background: #222; border-radius: 8px; }
+        .card { background: #2c2c2e; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+        
+        .tab-container { display: flex; gap: 8px; margin-bottom: 12px; }
+        .tab-btn { flex: 1; padding: 10px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; color: white; background: #444; }
+        .tab-btn.active.offense { background: #0A84FF; }
+        .tab-btn.active.defense { background: #FF453A; }
 
+        /* 타순 리스트 스타일 */
+        .order-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; }
+        .order-item { display: flex; align-items: center; gap: 8px; background: #3a3a3c; padding: 8px; border-radius: 8px; border: 2px solid transparent; }
+        .order-item.active { border-color: #0A84FF; background: #1c1c1e; } /* 현재 타자 강조 */
+        
+        .order-num { width: 25px; font-weight: bold; color: #0A84FF; font-size: 18px; }
+        .player-sel { flex: 2; background: #1c1c1e; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; font-size: 15px; }
+        .btn-set-active { flex: 1; background: #444; color: white; border: none; padding: 8px; border-radius: 4px; font-size: 13px; font-weight: bold; }
+        .order-item.active .btn-set-active { background: #0A84FF; }
+
+        /* 결과 버튼 그리드 */
+        .result-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+        button { font-weight: bold; border: none; border-radius: 6px; cursor: pointer; color: white; padding: 10px; }
+        .btn-res { background: #444; font-size: 14px; }
+        .btn-res.hit { background: #32D74B; color: black; }
+        .btn-res.hr { background: #FFD60A; color: black; }
+        
+        .current-batter-info { background: #000; padding: 10px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0A84FF; }
+        .info-text { font-size: 14px; color: #aaa; margin-bottom: 4px; }
+        .result-text { font-size: 18px; color: #FFD700; font-weight: bold; }
+
+        /* 투수 컨트롤 */
+        .pitch-display { text-align: center; font-size: 32px; font-weight: 900; margin: 15px 0; }
+        .pitch-btn-row { display: flex; gap: 10px; }
+        .btn-p { flex: 1; padding: 15px; font-size: 20px; }
+    </style>
+</head>
+<body>
+
+<div id="status">📡 연결 시도 중...</div>
+
+<div class="tab-container">
+    <button id="tab-offense" class="tab-btn active offense" onclick="setMode('offense')">공격 (타자)</button>
+    <button id="tab-defense" class="tab-btn" onclick="setMode('defense')">수비 (투수)</button>
+</div>
+
+<div id="panel-offense">
+    <div class="card" style="padding-bottom: 5px;">
+        <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #aaa;">전체 라인업 (선택 시 타석 입장)</h4>
+        <div class="order-list" id="order-list-container">
+            </div>
+    </div>
+
+    <div class="card">
+        <div class="current-batter-info">
+            <div class="info-text"><span id="active-order-num">1</span>번 타자 기록 입력</div>
+            <div class="result-text" id="disp-results">결과 없음</div>
+        </div>
+        <div class="result-grid">
+            <button class="btn-res" onclick="addRes('뜬공')">뜬공</button>
+            <button class="btn-res" onclick="addRes('땅볼')">땅볼</button>
+            <button class="btn-res" onclick="addRes('삼진')">삼진</button>
+            <button class="btn-res hit" onclick="addRes('볼넷')">볼넷</button>
+            <button class="btn-res hit" onclick="addRes('안타')">안타</button>
+            <button class="btn-res hit" onclick="addRes('2루타')">2루타</button>
+            <button class="btn-res hit" onclick="addRes('3루타')">3루타</button>
+            <button class="btn-res hr" onclick="addRes('홈런')">홈런</button>
+        </div>
+        <div style="display: flex; gap: 5px; margin-top: 8px;">
+            <input type="text" id="manual-in" placeholder="직접입력" style="flex:2; padding:8px; border-radius:5px; border:none; background:#111; color:white;">
+            <button style="flex:1; background:#0A84FF;" onclick="addManual()">추가</button>
+            <button style="background:#FF453A; padding:0 15px;" onclick="undo()">취소</button>
+        </div>
+    </div>
+</div>
+
+<div id="panel-defense" style="display: none;">
+    <div class="card">
+        <h4 style="margin:0 0 10px 0;">투수 선택</h4>
+        <select id="sel-pitcher" style="width:100%; padding:10px; background:#111; color:white; border-radius:8px; border:1px solid #555;" onchange="changePitcher()">
+            </select>
+        <div class="pitch-display">⚾ <span id="disp-p-count" style="color:#FFD60A;">0</span></div>
+        <div class="pitch-btn-row">
+            <button class="btn-p" style="background:#444;" onclick="changeP(-1)">-1</button>
+            <button class="btn-p" style="background:#32D74B; color:black;" onclick="changeP(1)">+1구</button>
+        </div>
+        <button style="width:100%; margin-top:10px; background:#222; font-size:12px;" onclick="resetP()">투구수 초기화</button>
+    </div>
+</div>
+
+<script>
+    const TARGET_ID = 'jiho-papa-lineup-viewer';
+    const peer = new Peer();
+    let conn;
+
+    const PLAYERS = ["김영재", "김태훈", "노윤호", "신선우", "이선우", "전준휘", "정수안", "홍현준", "김재윤", "최지호", "유하진", "홍현서"];
+
+    let state = {
+        mode: 'offense',
+        activeIdx: 0,
+        lineup: Array(9).fill(null).map((_, i) => ({ name: PLAYERS[i], results: [] })),
+        pitcher: { name: PLAYERS[0], count: 0 }
+    };
+
+    // 1~9번 슬롯 생성
+    function renderLineupSlots() {
+        const container = document.getElementById('order-list-container');
+        container.innerHTML = '';
+        state.lineup.forEach((batter, i) => {
+            const item = document.createElement('div');
+            item.className = `order-item ${state.activeIdx === i ? 'active' : ''}`;
+            item.id = `item-${i}`;
+            
+            let options = PLAYERS.map(p => `<option value="${p}" ${p === batter.name ? 'selected' : ''}>${p}</option>`).join('');
+            
+            item.innerHTML = `
+                <div class="order-num">${i + 1}</div>
+                <select class="player-sel" onchange="updatePlayerName(${i}, this.value)">${options}</select>
+                <button class="btn-set-active" onclick="setActiveBatter(${i})">${state.activeIdx === i ? '타석임' : '선택'}</button>
+            `;
+            container.appendChild(item);
+        });
+        
+        const selP = document.getElementById('sel-pitcher');
+        selP.innerHTML = PLAYERS.map(p => `<option value="${p}">${p}</option>`).join('');
+    }
+
+    peer.on('open', () => {
+        conn = peer.connect(TARGET_ID);
+        conn.on('open', () => {
+            document.getElementById('status').innerText = "✅ 연결됨";
+            document.getElementById('status').style.color = "#32D74B";
+            send();
+        });
+    });
+
+    function setMode(m) {
+        state.mode = m;
+        document.getElementById('panel-offense').style.display = m === 'offense' ? 'block' : 'none';
+        document.getElementById('panel-defense').style.display = m === 'defense' ? 'block' : 'none';
+        document.getElementById('tab-offense').classList.toggle('active', m === 'offense');
+        document.getElementById('tab-defense').classList.toggle('active', m === 'defense');
+        send();
+    }
+
+    function setActiveBatter(idx) {
+        state.activeIdx = idx;
+        renderLineupSlots();
+        updateUI();
+        send();
+    }
+
+    function updatePlayerName(idx, name) {
+        state.lineup[idx].name = name;
+        send();
+    }
+
+    function addRes(r) {
+        if(state.lineup[state.activeIdx].results.length >= 5) return;
+        state.lineup[state.activeIdx].results.push(r);
+        updateUI();
+        send();
+    }
+
+    function addManual() {
+        const val = document.getElementById('manual-in').value;
+        if(val) { addRes(val); document.getElementById('manual-in').value = ''; }
+    }
+
+    function undo() {
+        state.lineup[state.activeIdx].results.pop();
+        updateUI();
+        send();
+    }
+
+    function changeP(v) { state.pitcher.count = Math.max(0, state.pitcher.count + v); updateUI(); send(); }
+    function resetP() { state.pitcher.count = 0; updateUI(); send(); }
+    function changePitcher() { state.pitcher.name = document.getElementById('sel-pitcher').value; send(); }
+
+    function updateUI() {
+        const batter = state.lineup[state.activeIdx];
+        document.getElementById('active-order-num').innerText = state.activeIdx + 1;
+        document.getElementById('disp-results').innerText = batter.results.length > 0 ? batter.results.join(' / ') : '결과 없음';
+        document.getElementById('disp-p-count').innerText = state.pitcher.count;
+    }
+    function send() {
+        let text = "";
+        if (state.mode === 'offense') {
+            const b = state.lineup[state.activeIdx];
+            // 결과 사이 간격 조절 (결과 사이를 공백 3칸으로 띄움)
+            const resultStr = b.results.join('   '); 
+            // 이름과 결과 사이를 공백 5칸으로 크게 띄움
+            text = `${state.activeIdx + 1}. ${b.name}     ${resultStr}`;
+        } else {
+            text = `P. ${state.pitcher.name}     ⚾️ ${state.pitcher.count}`;
+        }
+        
+        if (conn && conn.open) {
+            conn.send({ text });
+        }
+    }
+
+    
+
+    renderLineupSlots();
+</script>
+</body>
+</html>
