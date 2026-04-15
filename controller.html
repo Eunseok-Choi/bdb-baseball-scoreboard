@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>리모컨 - 빅드림 스코어보드</title>
+    <title>리모컨 v3 - 빅드림 스코어보드</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         body { font-family: sans-serif; padding: 20px; text-align: center; background-color: #f0f0f0; }
@@ -13,31 +13,56 @@
         .danger { background: #dc3545; }
         h3 { margin-top: 0; }
         #status { color: red; font-weight: bold; margin-bottom: 10px; }
+        .input-text { font-size: 1.2rem; padding: 5px; width: 80%; margin-bottom: 10px; }
+        .bases-controller-svg { width: 120px; height: 120px; cursor: pointer; }
+        .base-ctrl-v3 { fill: transparent; stroke: #555; stroke-width: 3; }
+        .base-ctrl-v3.filled { fill: #ffd600; stroke: #ffd600; }
+        .score-display { font-size: 1.5rem; font-weight: bold; margin: 10px 0; }
+        .inning-ctrl-display { display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; margin-bottom: 10px; }
+        .inning-number-ctrl { font-size: 1.5rem; margin-right: 10px; }
+        .inning-arrow-ctrl { width: 40px; height: 40px; }
+        .inning-triangle { fill: #f44336; stroke: #f44336; stroke-width: 2; }
     </style>
 </head>
 <body>
 
-    <h2>점수판 리모컨</h2>
+    <h2>점수판 리모컨 v3</h2>
     <div id="status">🔴 방송 화면(뷰어)에 연결 중...</div>
 
     <div class="control-group">
-        <h3>점수</h3>
-        빅드림: <button onclick="updateData('home', 1)">+1</button> <button onclick="updateData('home', -1)">-1</button><br>
-        상대팀: <button onclick="updateData('away', 1)">+1</button> <button onclick="updateData('away', -1)">-1</button>
+        <h3>팀 이름 및 스코어</h3>
+        팀 A (빅드림) 이름: <input type="text" id="team-a-input" class="input-text" placeholder="예: 빅드림"><br>
+        팀 B (상대팀) 이름: <input type="text" id="team-b-input" class="input-text" placeholder="예: 상대팀"><br>
+        <button onclick="updateTeamNames()">적용</button>
+        <div class="score-display">
+            팀 A: <span id="score-a-ctrl-v3">0</span> - 팀 B: <span id="score-b-ctrl-v3">0</span>
+        </div>
+        팀 A 점수: <button onclick="updateScore('a', 1)">A팀 점수 +</button> <button onclick="updateScore('a', -1)">A팀 점수 -</button><br>
+        팀 B 점수: <button onclick="updateScore('b', 1)">B팀 점수 +</button> <button onclick="updateScore('b', -1)">B팀 점수 -</button>
+    </div>
+
+    <div class="control-group">
+        <h3>베이스 주자 현황</h3>
+        <p style="color: #555;">다이아몬드를 클릭하면 주자 현황을 토글합니다.</p>
+        <svg class="bases-controller-svg" viewBox="0 0 200 200" onclick="toggleRunnersCtrl()">
+            <polygon id="base-ctrl-v3-filled" class="base-ctrl-v3" points="100,20 180,100 100,180 20,100"/>
+        </svg>
     </div>
 
     <div class="control-group">
         <h3>볼카운트 (BSO)</h3>
-        Ball: <button onclick="updateData('ball', 1)">+1</button> <button onclick="updateData('ball', -1)">-1</button><br>
-        Strike: <button onclick="updateData('strike', 1)">+1</button> <button onclick="updateData('strike', -1)">-1</button><br>
-        Out: <button onclick="updateData('out', 1)">+1</button> <button onclick="updateData('out', -1)">-1</button><br>
-        <button class="danger" onclick="resetBSO()">BSO 초기화</button>
+        <p style="color: #555;">이 리모컨은 image_3.png의 배치를 반영하지만, 사용자가 요청한 추가 조작 버튼은 없습니다. 따라서 이닝과 점수, 베이스 현황, 팀 이름만 제어합니다.</p>
     </div>
 
     <div class="control-group">
-        <h3>이닝 텍스트 직접 입력</h3>
-        <input type="text" id="inning-input" value="1회 초" style="font-size: 1.2rem; padding: 5px;">
-        <button onclick="updateData('inning', document.getElementById('inning-input').value)">적용</button>
+        <h3>이닝</h3>
+        <div class="inning-ctrl-display">
+            <span class="inning-number-ctrl" id="inning-number-ctrl">1</span>
+            <svg class="inning-arrow-ctrl" viewBox="0 0 100 100" id="inning-arrow-ctrl-container">
+                <polygon id="inning-triangle-ctrl" class="inning-triangle" points="50,15 90,85 10,85"/>
+            </svg>
+        </div>
+        <button onclick="updateInning(1)">이닝 +</button> <button onclick="updateInning(-1)">이닝 -</button>
     </div>
 
     <script>
@@ -46,37 +71,93 @@
 
         // 현재 스코어 상태 저장
         let gameData = {
-            home: 0, away: 0,
-            inning: '1회 초',
-            ball: 0, strike: 0, out: 0
+            teamAName: '빅드림', teamBName: '상대팀',
+            teamAScore: 0, teamBScore: 0,
+            inningNumber: 1, inningTop: true, // true for Top, false for Bottom
+            runners: false, // true for a runner, false for empty base graphic
+            ballCount: 0, strikeCount: 0, outCount: 0 // not controllable
         };
 
         peer.on('open', (id) => {
             // 뷰어 파일에 하드코딩해둔 ID로 연결
-            conn = peer.connect('bigdream-baseball-viewer'); 
+            conn = peer.connect('bigdream-baseball-viewer-v3'); 
             
             conn.on('open', () => {
                 document.getElementById('status').innerText = '🟢 송출 화면에 연결됨!';
                 document.getElementById('status').style.color = 'green';
+                
+                // 초기 입력값 세팅
+                document.getElementById('team-a-input').value = gameData.teamAName;
+                document.getElementById('team-b-input').value = gameData.teamBName;
+                document.getElementById('score-a-ctrl-v3').innerText = gameData.teamAScore;
+                document.getElementById('score-b-ctrl-v3').innerText = gameData.teamBScore;
+                document.getElementById('inning-number-ctrl').innerText = gameData.inningNumber;
+                
                 sendData(); // 연결되자마자 초기값 한 번 전송
             });
         });
 
-        function updateData(key, value) {
-            if (key === 'inning') {
-                gameData[key] = value;
-            } else {
-                gameData[key] += value;
-                if (gameData[key] < 0) gameData[key] = 0; // 음수 방지
-                if (key === 'ball' && gameData.ball > 3) gameData.ball = 0;
-                if (key === 'strike' && gameData.strike > 2) gameData.strike = 0;
-                if (key === 'out' && gameData.out > 2) gameData.out = 0;
-            }
+        function updateTeamNames() {
+            gameData.teamAName = document.getElementById('team-a-input').value;
+            gameData.teamBName = document.getElementById('team-b-input').value;
             sendData();
         }
 
-        function resetBSO() {
-            gameData.ball = 0; gameData.strike = 0; gameData.out = 0;
+        function updateScore(team, delta) {
+            if (team === 'a') {
+                gameData.teamAScore += delta;
+                if (gameData.teamAScore < 0) gameData.teamAScore = 0;
+            } else {
+                gameData.teamBScore += delta;
+                if (gameData.teamBScore < 0) gameData.teamBScore = 0;
+            }
+            document.getElementById('score-a-ctrl-v3').innerText = gameData.teamAScore;
+            document.getElementById('score-b-ctrl-v3').innerText = gameData.teamBScore;
+            sendData();
+        }
+
+        function toggleRunnersCtrl() {
+            gameData.runners = !gameData.runners;
+            const ctrlBase = document.getElementById('base-ctrl-v3-filled');
+            if (gameData.runners) {
+                ctrlBase.className.baseVal = 'base-ctrl-v3 filled';
+            } else {
+                ctrlBase.className.baseVal = 'base-ctrl-v3';
+            }
+            sendData();
+        }
+        
+        function updateInning(delta) {
+            // State transition logic
+            if (delta === 1) { // plus
+                if (gameData.inningTop) {
+                    gameData.inningTop = false; // Bottom
+                } else {
+                    gameData.inningTop = true; // Top
+                    gameData.inningNumber += 1; // Increment number
+                }
+            } else { // minus
+                if (!gameData.inningTop) {
+                    gameData.inningTop = true; // Top
+                } else {
+                    gameData.inningTop = false; // Bottom
+                    gameData.inningNumber -= 1; // Decrement number
+                }
+            }
+            // Clamp and prevent negative inning
+            if (gameData.inningNumber < 1) {
+                gameData.inningNumber = 1;
+                gameData.inningTop = true;
+            }
+
+            // Update control page UI
+            document.getElementById('inning-number-ctrl').innerText = gameData.inningNumber;
+            const arrowContainer = document.getElementById('inning-arrow-ctrl-container');
+            if (gameData.inningTop) {
+                arrowContainer.style.transform = 'rotate(0deg)'; // Top: Up
+            } else {
+                arrowContainer.style.transform = 'rotate(180deg)'; // Bottom: Down
+            }
             sendData();
         }
 
