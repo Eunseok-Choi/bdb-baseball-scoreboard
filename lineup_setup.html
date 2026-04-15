@@ -192,17 +192,24 @@
         document.getElementById('disp-results').innerText = batter.results.length > 0 ? batter.results.join(' / ') : '결과 없음';
         document.getElementById('disp-p-count').innerText = state.pitcher.count;
     }
-
     function send() {
         let text = "";
         if (state.mode === 'offense') {
             const b = state.lineup[state.activeIdx];
-            text = `${state.activeIdx + 1}. ${b.name}  ${b.results.join(' ')}`;
+            // 결과 사이 간격 조절 (결과 사이를 공백 3칸으로 띄움)
+            const resultStr = b.results.join('   '); 
+            // 이름과 결과 사이를 공백 5칸으로 크게 띄움
+            text = `${state.activeIdx + 1}. ${b.name}     ${resultStr}`;
         } else {
-            text = `P. ${state.pitcher.name} ⚾️ ${state.pitcher.count}`;
+            text = `P. ${state.pitcher.name}     ⚾️ ${state.pitcher.count}`;
         }
-        if (conn && conn.open) conn.send({ text });
+        
+        if (conn && conn.open) {
+            conn.send({ text });
+        }
     }
+
+    
 
     renderLineupSlots();
 </script>
