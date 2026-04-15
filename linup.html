@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>라인업 뷰어</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; background: transparent; overflow: hidden; font-family: -apple-system, sans-serif; color: white; padding: 10px; }
+        
+        /* 스코어보드와 동일한 테마 적용 */
+        .lineup-container {
+            display: inline-block; /* 텍스트 길이에 맞춰 늘어남 */
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 8px;
+            padding: 8px 16px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            border: 1px solid #444;
+            font-size: 22px;
+            font-weight: 800;
+            white-space: nowrap; /* 줄바꿈 방지 */
+            letter-spacing: -0.5px;
+        }
+        
+        .highlight { color: #FFD700; } /* 안타, 홈런 등 강조색 */
+        .dim { color: #aaa; } /* 삼진, 뜬공 등 보조색 */
+    </style>
+</head>
+<body>
+
+<div class="lineup-container" id="lineup-box">
+    <span id="lineup-text">대기 중...</span>
+</div>
+
+<script>
+    // 스코어보드와 혼선되지 않도록 라인업 전용 ID 사용
+    const MY_ID = 'jiho-papa-lineup-viewer'; 
+    const peer = new Peer(MY_ID);
+
+    peer.on('connection', (conn) => {
+        conn.on('data', (data) => {
+            document.getElementById('lineup-text').innerText = data.text;
+        });
+    });
+</script>
+</body>
+</html>
