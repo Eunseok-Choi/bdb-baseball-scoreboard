@@ -9,8 +9,8 @@
         
         /* 스코어보드 고정 영역 */
         .main-container {
-            width: 500px; /* 크기 고정 */
-            background: rgba(0, 0, 0, 0.9); /* 불투명도 대폭 상승 */
+            width: 360px; /* 크기 고정 */
+            background: rgba(0, 0, 0, 0.8); /* 불투명도 대폭 상승 */
             border-radius: 12px;
             padding: 12px;
             margin: 10px;
@@ -27,12 +27,12 @@
         .info-row { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; }
         
         /* 조밀해진 베이스 */
-        .bases-container { width: 80px; height: 65px; }
-        .base { fill: none; stroke: #666; stroke-width: 4; transition: all 0.2s; }
+        .bases-container { width: 100px; height: 100px; }
+        .base { fill: none; stroke: #666; stroke-width: 3; transition: all 0.4s; }
         .base.on { fill: #FFD600; stroke: #FFD600; filter: drop-shadow(0 0 5px #FFD600); }
         
         /* 정밀해진 BSO */
-        .bso-container { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-left: 25px; }
+        .bso-container { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-left: 35px; }
         .count-row { display: flex; align-items: center; gap: 6px; font-weight: 900; font-size: 16px; }
         .label { width: 15px; }
         .dot { width: 18px; height: 18px; border-radius: 50%; background: #333; border: 1.5px solid #555; transition: 0.2s; }
@@ -60,7 +60,9 @@
 
     <div class="info-row">
         <svg class="bases-container" viewBox="0 0 100 80">
-            <polygon id="base2" class="base" points="50,10 62,25 50,40 38,25" /> <polygon id="base1" class="base" points="72,32 84,47 72,62 60,47" /> <polygon id="base3" class="base" points="28,32 40,47 28,62 16,47" /> </svg>
+            <polygon id="base2" class="base" points="50,10 64,25 50,40 36,25" /> 
+	    <polygon id="base1" class="base" points="72,32 86,47 72,62 58,47" /> 
+            <polygon id="base3" class="base" points="28,32 42,47 28,62 14,47" /> </svg>
 
         <div class="bso-container">
             <div class="count-row"><span class="label">B</span> <div id="b1" class="dot B"></div> <div id="b2" class="dot B"></div> <div id="b3" class="dot B"></div></div>
@@ -69,8 +71,7 @@
         </div>
 
         <div class="inning-box">
-            <span id="inning-num">1</span>
-            <div id="inning-tri" class="triangle up"></div>
+            <span id="inning-num">1</span><div id="inning-tri" class="triangle up"></div>
         </div>
     </div>
 </div>
