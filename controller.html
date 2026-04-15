@@ -6,130 +6,117 @@
     <title>야구 리모컨</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f0f0f0; padding: 20px; text-align: center; }
-        .card { background: white; border-radius: 15px; padding: 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h3 { margin-top: 0; color: #333; }
-        .btn { font-size: 18px; padding: 12px 20px; margin: 5px; border: none; border-radius: 8px; cursor: pointer; background: #007bff; color: white; }
-        .btn:active { background: #0056b3; }
-        .btn.red { background: #dc3545; }
-        .btn.green { background: #28a745; }
-        .btn-base { width: 60px; height: 60px; background: #ccc; border: 3px solid #999; transform: rotate(45deg); margin: 20px; color: black; font-weight: bold; }
-        .btn-base.on { background: #FFD600; border-color: #E6C200; }
-        .btn-base span { transform: rotate(-45deg); display: block; }
-        .status { font-weight: bold; margin-bottom: 10px; }
-        input { font-size: 16px; padding: 8px; width: 80%; margin-bottom: 10px; }
+        body { font-family: -apple-system, sans-serif; background: #1a1a1a; color: white; padding: 15px; text-align: center; }
+        .card { background: #2c2c2e; border-radius: 12px; padding: 15px; margin-bottom: 15px; }
+        .btn { font-size: 16px; padding: 12px; margin: 5px; border: none; border-radius: 8px; cursor: pointer; background: #0A84FF; color: white; font-weight: bold; }
+        .btn:active { opacity: 0.7; }
+        .btn.red { background: #FF453A; }
+        .btn.green { background: #32D74B; }
+        
+        /* 리모컨 베이스 버튼 */
+        .base-grid { display: flex; flex-direction: column; align-items: center; margin: 10px 0; }
+        .btn-base { width: 50px; height: 50px; background: #444; border: 2px solid #666; transform: rotate(45deg); margin: 15px; }
+        .btn-base.on { background: #FFD600; border-color: #FFD600; }
+        
+        /* 리모컨 BSO 상태 표시 */
+        .bso-preview { display: flex; justify-content: center; gap: 15px; margin: 15px 0; background: #111; padding: 10px; border-radius: 8px; }
+        .dot { width: 25px; height: 25px; border-radius: 50%; background: #333; border: 2px solid #555; }
+        .dot.B.on { background: #32D74B; border-color: #32D74B; }
+        .dot.S.on { background: #FFD60A; border-color: #FFD60A; }
+        .dot.O.on { background: #FF453A; border-color: #FF453A; }
+        
+        input { background: #3a3a3c; border: none; color: white; padding: 10px; border-radius: 6px; width: 80%; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
-<div id="conn-status" class="status" style="color: red;">상태: 방송 화면 연결 시도 중...</div>
+<div id="status" style="color: #FF453A; font-weight: bold; margin-bottom: 10px;">상태: 방송 화면 연결 시도 중...</div>
 
 <div class="card">
-    <h3>팀 설정</h3>
     <input type="text" id="in-name-a" value="빅드림" oninput="send()"> <br>
     <input type="text" id="in-name-b" value="상대팀" oninput="send()">
 </div>
 
 <div class="card">
-    <h3>점수 조작</h3>
-    팀 A: <button class="btn" onclick="addScore('a', 1)">+</button> <button class="btn red" onclick="addScore('a', -1)">-</button> <br>
-    팀 B: <button class="btn" onclick="addScore('b', 1)">+</button> <button class="btn red" onclick="addScore('b', -1)">-1</button>
+    <h3>점수</h3>
+    A <button class="btn" onclick="addScore('a', 1)">+</button> <button class="btn red" onclick="addScore('a', -1)">-</button> 
+    B <button class="btn" onclick="addScore('b', 1)">+</button> <button class="btn red" onclick="addScore('b', -1)">-</button>
 </div>
 
 <div class="card">
-    <h3>베이스 (터치하여 변경)</h3>
-    <div style="display: flex; justify-content: center; align-items: center; height: 150px;">
-        <button id="btn-base2" class="btn-base" onclick="toggleBase(2)"><span>2루</span></button>
+    <h3>베이스 조작</h3>
+    <div class="base-grid">
+        <div id="btn-base2" class="btn-base" onclick="toggleBase(2)"></div>
+        <div style="display:flex; gap:30px;">
+            <div id="btn-base3" class="btn-base" onclick="toggleBase(3)"></div>
+            <div id="btn-base1" class="btn-base" onclick="toggleBase(1)"></div>
+        </div>
     </div>
-    <div style="display: flex; justify-content: center; gap: 40px;">
-        <button id="btn-base3" class="btn-base" onclick="toggleBase(3)"><span>3루</span></button>
-        <button id="btn-base1" class="btn-base" onclick="toggleBase(1)"><span>1루</span></button>
+</div>
+
+<div class="card">
+    <h3>이닝: <span id="view-inning">1회초</span></h3>
+    <button class="btn green" onclick="changeInning(1)">다음 차례</button>
+    <button class="btn red" onclick="changeInning(-1)">이전 차례</button>
+</div>
+
+<div class="card">
+    <h3>BSO 카운터</h3>
+    <div class="bso-preview">
+        <div>B <div id="rb1" class="dot B"></div> <div id="rb2" class="dot B"></div> <div id="rb3" class="dot B"></div></div>
+        <div>S <div id="rs1" class="dot S"></div> <div id="rs2" class="dot S"></div></div>
+        <div>O <div id="ro1" class="dot O"></div> <div id="ro2" class="dot O"></div></div>
     </div>
-</div>
-
-<div class="card">
-    <h3>이닝 조작</h3>
-    <button class="btn green" onclick="changeInning(1)">이닝 + (다음차례)</button>
-    <button class="btn red" onclick="changeInning(-1)">이닝 - (이전차례)</button>
-</div>
-
-<div class="card">
-    <h3>BSO 카운트</h3>
-    B: <button class="btn" onclick="addBSO('b')">볼+</button> 
-    S: <button class="btn" onclick="addBSO('s')">스트+</button> 
-    O: <button class="btn" onclick="addBSO('o')">아웃+</button> <br>
-    <button class="btn red" onclick="resetBSO()">카운트 초기화</button>
+    <button class="btn green" onclick="addBSO('b')">볼(B)</button> 
+    <button class="btn" style="background:#FFD60A; color:black;" onclick="addBSO('s')">스트(S)</button> 
+    <button class="btn red" onclick="addBSO('o')">아웃(O)</button>
+    <br>
+    <button class="btn" style="background:#8e8e93" onclick="resetBSO()">초기화</button>
 </div>
 
 <script>
-    const TARGET_ID = 'jiho-papa-live-viewer'; // viewer와 동일해야 함
+    const TARGET_ID = 'jiho-papa-live-viewer';
     const peer = new Peer();
     let conn;
+    let state = { nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0, inning: 1, isTop: true, base1: false, base2: false, base3: false, b: 0, s: 0, o: 0 };
 
-    let state = {
-        nameA: '빅드림', nameB: '상대팀',
-        scoreA: 0, scoreB: 0,
-        inning: 1, isTop: true,
-        base1: false, base2: false, base3: false,
-        b: 0, s: 0, o: 0
-    };
-
-    peer.on('open', () => {
-        connect();
-    });
-
+    peer.on('open', connect);
     function connect() {
         conn = peer.connect(TARGET_ID);
         conn.on('open', () => {
-            document.getElementById('conn-status').innerText = "상태: 연결 성공! 제어 가능";
-            document.getElementById('conn-status').style.color = "green";
+            document.getElementById('status').innerText = "상태: 연결됨 ✅";
+            document.getElementById('status').style.color = "#32D74B";
             send();
-        });
-        conn.on('close', () => {
-            document.getElementById('conn-status').innerText = "상태: 끊어짐. 재연결 중...";
-            setTimeout(connect, 2000);
         });
     }
 
     function send() {
         state.nameA = document.getElementById('in-name-a').value;
         state.nameB = document.getElementById('in-name-b').value;
+        document.getElementById('view-inning').innerText = state.inning + (state.isTop ? '회초' : '회말');
+        
+        // 리모컨 화면 불 켜기
+        for(let i=1; i<=3; i++) document.getElementById('rb'+i)?.classList.toggle('on', state.b >= i);
+        for(let i=1; i<=2; i++) document.getElementById('rs'+i)?.classList.toggle('on', state.s >= i);
+        for(let i=1; i<=2; i++) document.getElementById('ro'+i)?.classList.toggle('on', state.o >= i);
+        for(let i=1; i<=3; i++) document.getElementById('btn-base'+i).classList.toggle('on', state['base'+i]);
+
         if (conn && conn.open) conn.send(state);
     }
 
-    function addScore(team, val) {
-        if(team === 'a') state.scoreA = Math.max(0, state.scoreA + val);
-        else state.scoreB = Math.max(0, state.scoreB + val);
-        send();
+    function addScore(t, v) { t==='a' ? state.scoreA=Math.max(0, state.scoreA+v) : state.scoreB=Math.max(0, state.scoreB+v); send(); }
+    function toggleBase(n) { state['base'+n] = !state['base'+n]; send(); }
+    function addBSO(t) { 
+        state[t]++; 
+        if(t==='b' && state.b>3) state.b=0; 
+        if(t==='s' && state.s>2) state.s=0; 
+        if(t==='o' && state.o>2) state.o=0; 
+        send(); 
     }
-
-    function toggleBase(num) {
-        state['base'+num] = !state['base'+num];
-        document.getElementById('btn-base'+num).classList.toggle('on', state['base'+num]);
-        send();
-    }
-
-    function addBSO(type) {
-        state[type]++;
-        if(type==='b' && state.b > 3) state.b = 0;
-        if(type==='s' && state.s > 2) state.s = 0;
-        if(type==='o' && state.o > 2) state.o = 0;
-        send();
-    }
-
-    function resetBSO() {
-        state.b = 0; state.s = 0; state.o = 0;
-        send();
-    }
-
-    function changeInning(val) {
-        if(val === 1) { // 다음
-            if(state.isTop) state.isTop = false;
-            else { state.isTop = true; state.inning++; }
-        } else { // 이전
-            if(!state.isTop) state.isTop = true;
-            else { state.isTop = false; state.inning = Math.max(1, state.inning - 1); }
-        }
+    function resetBSO() { state.b=0; state.s=0; state.o=0; send(); }
+    function changeInning(v) {
+        if(v===1) { if(state.isTop) state.isTop=false; else { state.isTop=true; state.inning++; }}
+        else { if(!state.isTop) state.isTop=true; else { state.isTop=false; state.inning=Math.max(1, state.inning-1); }}
         send();
     }
 </script>
