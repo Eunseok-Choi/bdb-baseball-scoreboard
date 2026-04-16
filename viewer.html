@@ -2,81 +2,103 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>야구 스코어보드 - 뷰어</title>
+    <title>분리형 야구 뷰어</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        body { margin: 0; background: transparent; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: white; }
+        body { margin: 0; background: transparent; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; }
         
-        /* 스코어보드 고정 영역 */
-        .main-container {
-            width: 360px; /* 크기 고정 */
-            background: rgba(0, 0, 0, 0.8); /* 불투명도 대폭 상승 */
-            border-radius: 12px;
-            padding: 12px;
-            margin: 10px;
-            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
-            border: 1px solid #444;
+        /* 마스터 컨테이너: 박스 사이의 간격을 8px로 설정 */
+        .master-container { 
+            width: 360px; 
+            margin: 10px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 1px; 
         }
 
-        /* 상단 점수 영역 */
+        /* [1] 스코어보드 박스 */
+        .scoreboard {
+            background: rgba(0, 0, 0, 0.92);
+            padding: 12px;
+            border: 1px solid #444;
+            border-radius: 12px; /* 전체 모서리 둥글게 */
+            box-shadow: 0 6px 12px rgba(0,0,0,0.5);
+        }
+        
         .score-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 10px; }
-        .team-box { flex: 1.5; text-align: center; font-size: 20px; font-weight: 800; letter-spacing: -1px; }
+        .team-box { flex: 1.5; text-align: center; font-size: 20px; font-weight: 800; }
         .score-box { flex: 1; text-align: center; font-size: 36px; font-weight: 900; color: #FFD700; text-shadow: 2px 2px 4px black; }
+        .info-row { display: flex; align-items: center; justify-content: space-between; padding: 0 5px; }
 
-        /* 하단 정보 영역 */
-        .info-row { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; }
-        
-/* 찌그러짐 원천 차단: 순수 CSS 마름모(DIV) 사용 */
-        .bases-container { width: 100px; height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .base { width: 18px; height: 18px; border: 3px solid #666; transform: rotate(45deg); transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s; background-color: transparent; }
+        /* 베이스 (DIV 방식) */
+        .bases-container { width: 80px; height: 65px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .base { width: 16px; height: 16px; border: 3.5px solid #666; transform: rotate(45deg); transition: background-color 0.2s, border-color 0.2s; background-color: transparent; }
         .base.on { background-color: #FFD600; border-color: #FFD600; box-shadow: 0 0 6px #FFD600; }
-        .base-row { display: flex; gap: 16px; margin-top: -4px; }
-        
-        /* 정밀해진 BSO */
-        .bso-container { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-left: 35px; }
+        .base-row-mid { display: flex; gap: 18px; margin-top: -3px; }
+
+        /* BSO (라벨 폭 고정으로 정렬 유지) */
+        .bso-container { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-left: 25px; }
         .count-row { display: flex; align-items: center; gap: 6px; font-weight: 900; font-size: 16px; }
-        .label { width: 15px; }
-        .dot { width: 18px; height: 18px; border-radius: 50%; background: #333; border: 1.5px solid #555; transition: 0.2s; }
-        
-        /* BSO 색상 규정 */
+        .bso-label { display: inline-block; width: 14px; text-align: left; }
+        .dot { width: 17px; height: 17px; border-radius: 50%; background: #333; border: 1.5px solid #555; }
         .dot.B.on { background: #00FF41; border-color: #00FF41; box-shadow: 0 0 8px #00FF41; }
         .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; box-shadow: 0 0 8px #FFEB3B; }
         .dot.O.on { background: #FF3B30; border-color: #FF3B30; box-shadow: 0 0 8px #FF3B30; }
 
-        /* 이닝 및 삼각형 */
-        .inning-box { width: 80px; text-align: center; display: flex; flex-direction: column; align-items: center; font-size: 22px; font-weight: 800; }
+        /* 이닝 */
+        .inning-box { width: 60px; text-align: center; display: flex; flex-direction: column; align-items: center; font-size: 20px; font-weight: 800; }
         .triangle { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; margin-top: 4px; }
         .triangle.up { border-bottom: 18px solid #FF3B30; } 
         .triangle.down { border-top: 18px solid #FF3B30; }
+
+        /* [2] 라인업 바 박스 */
+        .lineup-bar {
+            background: rgba(30, 30, 30, 0.95);
+            padding: 5px 15px;
+            border: 1px solid #444;
+            border-radius: 8px; /* 독립적인 라운드 테두리 */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+            font-size: 13px;
+            font-weight: 700;
+            min-height: 24px;
+            display: flex; align-items: center;
+            width: 100%; box-sizing: border-box;
+        }
+        
+        #lineup-text { width: 100%; color: #eee; letter-spacing: -0.2px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
 
-<div class="main-container">
-    <div class="score-row">
-        <div class="team-box" id="name-a">빅드림</div>
-        <div class="score-box"><span id="score-a">0</span> : <span id="score-b">0</span></div>
-        <div class="team-box" id="name-b">상대팀</div>
-    </div>
-
-    <div class="info-row">
-        <div class="bases-container">
-            <div id="base2" class="base"></div>
-            <div class="base-row">
-                <div id="base3" class="base"></div>
-                <div id="base1" class="base"></div>
+<div class="master-container">
+    <div class="scoreboard">
+        <div class="score-row">
+            <div class="team-box" id="name-a">빅드림</div>
+            <div class="score-box"><span id="score-a">0</span> : <span id="score-b">0</span></div>
+            <div class="team-box" id="name-b">상대팀</div>
+        </div>
+        <div class="info-row">
+            <div class="bases-container">
+                <div id="base2" class="base"></div>
+                <div class="base-row-mid">
+                    <div id="base3" class="base"></div>
+                    <div id="base1" class="base"></div>
+                </div>
+            </div>
+            <div class="bso-container">
+                <div class="count-row"><span class="bso-label">B</span> <div id="b1" class="dot B"></div> <div id="b2" class="dot B"></div> <div id="b3" class="dot B"></div></div>
+                <div class="count-row"><span class="bso-label">S</span> <div id="s1" class="dot S"></div> <div id="s2" class="dot S"></div></div>
+                <div class="count-row"><span class="bso-label">O</span> <div id="o1" class="dot O"></div> <div id="o2" class="dot O"></div></div>
+            </div>
+            <div class="inning-box">
+                <span id="inning-num">1</span>
+                <div id="inning-tri" class="triangle up"></div>
             </div>
         </div>
+    </div>
 
-        <div class="bso-container">
-            <div class="count-row"><span class="label">B</span> <div id="b1" class="dot B"></div> <div id="b2" class="dot B"></div> <div id="b3" class="dot B"></div></div>
-            <div class="count-row"><span class="label">S</span> <div id="s1" class="dot S"></div> <div id="s2" class="dot S"></div></div>
-            <div class="count-row"><span class="label">O</span> <div id="o1" class="dot O"></div> <div id="o2" class="dot O"></div></div>
-        </div>
-
-        <div class="inning-box">
-            <span id="inning-num">1</span><div id="inning-tri" class="triangle up"></div>
-        </div>
+    <div class="lineup-bar">
+        <div id="lineup-text">준비 중...</div>
     </div>
 </div>
 
@@ -86,18 +108,28 @@
 
     peer.on('connection', (conn) => {
         conn.on('data', (data) => {
-            document.getElementById('name-a').innerText = data.nameA;
-            document.getElementById('name-b').innerText = data.nameB;
-            document.getElementById('score-a').innerText = data.scoreA;
-            document.getElementById('score-b').innerText = data.scoreB;
-            document.getElementById('inning-num').innerText = data.inning;
-            document.getElementById('inning-tri').className = data.isTop ? 'triangle up' : 'triangle down';
-            document.getElementById('base1').classList.toggle('on', data.base1);
-            document.getElementById('base2').classList.toggle('on', data.base2);
-            document.getElementById('base3').classList.toggle('on', data.base3);
-            for(let i=1; i<=3; i++) document.getElementById('b'+i)?.classList.toggle('on', data.b >= i);
-            for(let i=1; i<=2; i++) document.getElementById('s'+i)?.classList.toggle('on', data.s >= i);
-            for(let i=1; i<=2; i++) document.getElementById('o'+i)?.classList.toggle('on', data.o >= i);
+            // 라인업 데이터 처리
+            if (data.html !== undefined) {
+                document.getElementById('lineup-text').innerHTML = data.html;
+            } 
+            else if (data.text !== undefined) {
+                document.getElementById('lineup-text').innerText = data.text;
+            }
+            // 스코어 데이터 처리
+            else {
+                document.getElementById('name-a').innerText = data.nameA;
+                document.getElementById('name-b').innerText = data.nameB;
+                document.getElementById('score-a').innerText = data.scoreA;
+                document.getElementById('score-b').innerText = data.scoreB;
+                document.getElementById('inning-num').innerText = data.inning;
+                document.getElementById('inning-tri').className = data.isTop ? 'triangle up' : 'triangle down';
+                document.getElementById('base1').classList.toggle('on', data.base1);
+                document.getElementById('base2').classList.toggle('on', data.base2);
+                document.getElementById('base3').classList.toggle('on', data.base3);
+                for(let i=1; i<=3; i++) document.getElementById('b'+i)?.classList.toggle('on', data.b >= i);
+                for(let i=1; i<=2; i++) document.getElementById('s'+i)?.classList.toggle('on', data.s >= i);
+                for(let i=1; i<=2; i++) document.getElementById('o'+i)?.classList.toggle('on', data.o >= i);
+            }
         });
     });
 </script>
