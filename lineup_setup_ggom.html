@@ -98,7 +98,7 @@
 </div>
 
 <script>
-    const TARGET_ID = 'jiho-papa-lineup-viewer';
+    const TARGET_ID = 'jiho-papa-live-viewer';
     const peer = new Peer();
     let conn;
 
@@ -192,24 +192,30 @@
         document.getElementById('disp-results').innerText = batter.results.length > 0 ? batter.results.join(' / ') : '결과 없음';
         document.getElementById('disp-p-count').innerText = state.pitcher.count;
     }
-    function send() {
-        let text = "";
+ function send() {
+        let htmlStr = "";
+        
         if (state.mode === 'offense') {
             const b = state.lineup[state.activeIdx];
-            // 결과 사이 간격 조절 (결과 사이를 공백 3칸으로 띄움)
-            const resultStr = b.results.join('   '); 
-            // 이름과 결과 사이를 공백 5칸으로 크게 띄움
-            text = `${state.activeIdx + 1}. ${b.name}     ${resultStr}`;
+            const resultStr = b.results.join(' &nbsp; '); // 결과들 사이 띄어쓰기
+            // 양쪽 정렬을 위해 HTML 코드 자체를 전송
+            htmlStr = `
+                <div style="display: flex; justify-content: space-between; width: 100%;">
+                    <span>${state.activeIdx + 1}. ${b.name}</span>
+                    <span style="color: #FFD700;">${resultStr}</span>
+                </div>`;
         } else {
-            text = `P. ${state.pitcher.name}     ⚾️ ${state.pitcher.count}`;
+            // 수비일 때 투수 이름은 왼쪽, 공과 숫자는 오른쪽에 착 붙게 분리
+            htmlStr = `
+                <div style="display: flex; justify-content: space-between; width: 100%;">
+                    <span>P. ${state.pitcher.name}</span>
+                    <span>⚾️ ${state.pitcher.count}</span>
+                </div>`;
         }
         
-        if (conn && conn.open) {
-            conn.send({ text });
-        }
+        // viewer가 html 구조를 해석할 수 있도록 'html' 키워드로 보냄
+        if (conn && conn.open) conn.send({ html: htmlStr });
     }
-
-    
 
     renderLineupSlots();
 </script>
