@@ -26,10 +26,11 @@
         /* 하단 정보 영역 */
         .info-row { display: flex; align-items: center; justify-content: space-between; padding: 0 10px; }
         
-        /* 조밀해진 베이스 */
-        .bases-container { width: 100px; height: 100px; }
-        .base { fill: none; stroke: #666; stroke-width: 3; transition: all 0.2s; stroke 0.2s; }
-        .base.on { fill: #FFD600; stroke: #FFD600; filter: drop-shadow(0 0 5px #FFD600); }
+/* 찌그러짐 원천 차단: 순수 CSS 마름모(DIV) 사용 */
+        .bases-container { width: 100px; height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .base { width: 18px; height: 18px; border: 3px solid #666; transform: rotate(45deg); transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s; background-color: transparent; }
+        .base.on { background-color: #FFD600; border-color: #FFD600; box-shadow: 0 0 6px #FFD600; }
+        .base-row { display: flex; gap: 16px; margin-top: -4px; }
         
         /* 정밀해진 BSO */
         .bso-container { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-left: 35px; }
@@ -59,10 +60,13 @@
     </div>
 
     <div class="info-row">
-        <svg class="bases-container" viewBox="0 0 100 80">
-            <polygon id="base2" class="base" points="50,10 64,25 50,40 36,25" /> 
-	    <polygon id="base1" class="base" points="72,32 86,47 72,62 58,47" /> 
-            <polygon id="base3" class="base" points="28,32 42,47 28,62 14,47" /> </svg>
+        <div class="bases-container">
+            <div id="base2" class="base"></div>
+            <div class="base-row">
+                <div id="base3" class="base"></div>
+                <div id="base1" class="base"></div>
+            </div>
+        </div>
 
         <div class="bso-container">
             <div class="count-row"><span class="label">B</span> <div id="b1" class="dot B"></div> <div id="b2" class="dot B"></div> <div id="b3" class="dot B"></div></div>
