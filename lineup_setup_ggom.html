@@ -197,23 +197,14 @@
         
         if (state.mode === 'offense') {
             const b = state.lineup[state.activeIdx];
-            const resultStr = b.results.join(' &nbsp; '); // 결과들 사이 띄어쓰기
-            // 양쪽 정렬을 위해 HTML 코드 자체를 전송
-            htmlStr = `
-                <div style="display: flex; justify-content: space-between; width: 100%;">
-                    <span>${state.activeIdx + 1}. ${b.name}</span>
-                    <span style="color: #FFD700;">${resultStr}</span>
-                </div>`;
+            const resultStr = b.results.join(' &nbsp; '); 
+            // 뷰어에서 줄바꿈이 생기지 않도록 엔터를 모두 지우고 한 줄로 붙였습니다.
+            htmlStr = `<div style="display: flex; justify-content: space-between; width: 100%;"><span>${state.activeIdx + 1}. ${b.name}</span><span style="color: #FFD700;">${resultStr}</span></div>`;
         } else {
-            // 수비일 때 투수 이름은 왼쪽, 공과 숫자는 오른쪽에 착 붙게 분리
-            htmlStr = `
-                <div style="display: flex; justify-content: space-between; width: 100%;">
-                    <span>P. ${state.pitcher.name}</span>
-                    <span>⚾️ ${state.pitcher.count}</span>
-                </div>`;
+            // 수비(투수) 부분도 마찬가지로 한 줄로 압축합니다.
+            htmlStr = `<div style="display: flex; justify-content: space-between; width: 100%;"><span>P. ${state.pitcher.name}</span><span>⚾️ ${state.pitcher.count}</span></div>`;
         }
         
-        // viewer가 html 구조를 해석할 수 있도록 'html' 키워드로 보냄
         if (conn && conn.open) conn.send({ html: htmlStr });
     }
 
