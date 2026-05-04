@@ -3,218 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>빅드림 야구 스코어 보드</title>
+    <title>야구 스코어 리모컨</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        * { box-sizing: border-box}
-        html, body { overflow-x: hidden; width: 100%; margin: 0; }
-        
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: white; margin: 0; padding: 10px; touch-action: manipulation; }
-        
-        /* 상단 상태창 */
-        #status { text-align: center; font-size: 14px; font-weight: bold; color: #FF453A; margin-bottom: 10px; padding: 5px; background: #222; border-radius: 8px; }
-        
-        /* 공통 카드 스타일 */
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, sans-serif; background: #121212; color: white; margin: 0; padding: 10px; touch-action: manipulation; overflow-x: hidden; }
+        #status { text-align: center; font-size: 13px; font-weight: bold; color: #FF453A; margin-bottom: 10px; padding: 6px; background: #222; border-radius: 8px; }
         .card { background: #2c2c2e; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-        
-        /* 버튼 공통 속성 */
         button { font-size: 16px; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; color: white; padding: 10px; display: flex; align-items: center; justify-content: center; }
         button:active { opacity: 0.7; }
-        
-        /* 팀 및 점수 영역 (2열 배치) */
         .grid-score { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .team-col { display: flex; flex-direction: column; gap:8px; min-width: 0; }
-        .team-input { width: 100%;  background: #1c1c1e; border: 1px solid #444; color: white; font-size: 16px; font-weight: bold; text-align: center; padding: 8px 0; border-radius: 6px; min-width: 0; }
+        .team-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .team-input { width: 100%; background: #1c1c1e; border: 1px solid #444; color: white; font-size: 16px; font-weight: bold; text-align: center; padding: 8px 0; border-radius: 6px; min-width: 0; }
         .score-ctrl { display: flex; gap: 5px; }
         .btn-plus { background: #0A84FF; flex: 2; font-size: 20px; }
         .btn-minus { background: #FF453A; flex: 1; font-size: 20px; }
         .score-display { text-align: center; font-size: 28px; font-weight: 900; color: #FFD700; margin-top: -5px; }
-
-        /* 베이스 및 이닝 영역 (2열 배치) */
         .grid-middle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        
-        /* 베이스 다이아몬드 */
         .base-grid { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100px; }
         .btn-base { width: 35px; height: 35px; background: #444; border: 2px solid #666; transform: rotate(45deg); margin: 6px; }
-        .btn-base.on { background: #FFD600; border-color: #FFD600; box-shadow: 0 0 10px rgba(255, 214, 0, 0.5); }
+        .btn-base.on { background: #FFD600; border-color: #FFD600; }
         .base-row-mid { display: flex; gap: 30px; margin-top: -15px; }
-
-        /* 이닝 컨트롤 */
         .inning-ctrl { display: flex; flex-direction: column; justify-content: center; gap: 8px; text-align: center; }
-        .inning-text { font-size: 22px; font-weight: bold; color: #fff; }
-        .btn-inning { background: #32D74B; font-size: 14px; padding: 12px; }
-        .btn-inning.prev { background: #8E8E93; }
-
-        /* BSO 카운터 영역 */
-        .bso-container { display: flex; flex-direction: column; gap: 8px; }
-        .bso-row { display: grid; grid-template-columns: 2fr 3fr; gap: 10px; align-items: center; }
-        .bso-btn { font-size: 16px; padding: 14px; }
-        .bso-btn.B { background: #32D74B; }
-        .bso-btn.S { background: #FFD60A; color: black; }
-        .bso-btn.O { background: #FF453A; }
-        
-        /* BSO 불빛 표시 */
-        .bso-lights { display: flex; gap: 8px; }
+        .inning-text { font-size: 20px; font-weight: bold; }
+        .btn-inning { background: #32D74B; font-size: 14px; }
+        .bso-row { display: grid; grid-template-columns: 2fr 3fr; gap: 10px; align-items: center; margin-bottom: 8px; }
         .dot { width: 20px; height: 20px; border-radius: 50%; background: #333; border: 2px solid #555; }
-        .dot.B.on { background: #00FF41; border-color: #00FF41; box-shadow: 0 0 8px #00FF41; }
-        .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; box-shadow: 0 0 8px #FFEB3B; }
-        .dot.O.on { background: #FF3B30; border-color: #FF3B30; box-shadow: 0 0 8px #FF3B30; }
-
-        .btn-reset { background: #444; width: 100%; margin-top: 10px; }
+        .dot.B.on { background: #00FF41; border-color: #00FF41; }
+        .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; }
+        .dot.O.on { background: #FF3B30; border-color: #FF3B30; }
     </style>
 </head>
 <body>
 
-<div id="status">📡 방송 화면 연결 시도 중...</div>
+<div id="status">📡 방송 연결 시도 중...</div>
 
 <div class="card grid-score">
     <div class="team-col">
-        <input type="text" id="in-name-a" class="team-input" value="빅드림" onchange="send()">
+        <input type="text" id="in-name-a" class="team-input" value="빅드림" onchange="saveAndSend()">
         <div class="score-display" id="disp-score-a">0</div>
-        <div class="score-ctrl">
-            <button class="btn-minus" onclick="addScore('a', -1)">-</button>
-            <button class="btn-plus" onclick="addScore('a', 1)">+</button>
-        </div>
+        <div class="score-ctrl"><button class="btn-minus" onclick="addScore('a', -1)">-</button><button class="btn-plus" onclick="addScore('a', 1)">+</button></div>
     </div>
     <div class="team-col">
-        <input type="text" id="in-name-b" class="team-input" value="상대팀" onchange="send()">
+        <input type="text" id="in-name-b" class="team-input" value="상대팀" onchange="saveAndSend()">
         <div class="score-display" id="disp-score-b">0</div>
-        <div class="score-ctrl">
-            <button class="btn-minus" onclick="addScore('b', -1)">-</button>
-            <button class="btn-plus" onclick="addScore('b', 1)">+</button>
-        </div>
+        <div class="score-ctrl"><button class="btn-minus" onclick="addScore('b', -1)">-</button><button class="btn-plus" onclick="addScore('b', 1)">+</button></div>
     </div>
 </div>
 
 <div class="card grid-middle">
     <div class="base-grid">
         <div id="btn-base2" class="btn-base" onclick="toggleBase(2)"></div>
-        <div class="base-row-mid">
-            <div id="btn-base3" class="btn-base" onclick="toggleBase(3)"></div>
-            <div id="btn-base1" class="btn-base" onclick="toggleBase(1)"></div>
-        </div>
+        <div class="base-row-mid"><div id="btn-base3" class="btn-base" onclick="toggleBase(3)"></div><div id="btn-base1" class="btn-base" onclick="toggleBase(1)"></div></div>
     </div>
     <div class="inning-ctrl">
         <div class="inning-text" id="disp-inning">1회 초</div>
-        <button class="btn-inning" onclick="changeInning(1)">이닝 +</button>
-        <button class="btn-inning prev" onclick="changeInning(-1)">이닝 -</button>
+        <button class="btn-inning" onclick="changeInning(1)">다음 차례 ⏭</button>
+        <button class="btn-inning" style="background:#666" onclick="changeInning(-1)">이전 ⏮</button>
     </div>
 </div>
 
-<div class="card bso-container">
+<div class="card">
     <div class="bso-row">
-        <button class="bso-btn B" onclick="addBSO('b')">볼 (B)</button>
-        <div class="bso-lights">
-            <div id="rb1" class="dot B"></div><div id="rb2" class="dot B"></div><div id="rb3" class="dot B"></div>
-        </div>
+        <button style="background:#32D74B; color:black" onclick="addBSO('b')">볼 (B)</button>
+        <div style="display:flex; gap:8px;"><div id="rb1" class="dot B"></div><div id="rb2" class="dot B"></div><div id="rb3" class="dot B"></div></div>
     </div>
     <div class="bso-row">
-        <button class="bso-btn S" onclick="addBSO('s')">스트라이크 (S)</button>
-        <div class="bso-lights">
-            <div id="rs1" class="dot S"></div><div id="rs2" class="dot S"></div>
-        </div>
+        <button style="background:#FFD60A; color:black" onclick="addBSO('s')">스트 (S)</button>
+        <div style="display:flex; gap:8px;"><div id="rs1" class="dot S"></div><div id="rs2" class="dot S"></div></div>
     </div>
     <div class="bso-row">
-        <button class="bso-btn O" onclick="addBSO('o')">아웃 (O)</button>
-        <div class="bso-lights">
-            <div id="ro1" class="dot O"></div><div id="ro2" class="dot O"></div>
-        </div>
+        <button style="background:#FF453A" onclick="addBSO('o')">아웃 (O)</button>
+        <div style="display:flex; gap:8px;"><div id="ro1" class="dot O"></div><div id="ro2" class="dot O"></div></div>
     </div>
-    <button class="btn-reset" onclick="resetBSO()">BSO 카운트 초기화 🔄</button>
+    <button style="background:#444; width:100%; margin-top:5px;" onclick="resetBSO()">BSO 초기화</button>
 </div>
 
 <script>
-    // 뷰어 파일과 동일한 ID
     const TARGET_ID = 'jiho-papa-live-viewer';
     const peer = new Peer();
     let conn;
     
-    // 데이터 상태 관리
-    let state = { 
-        nameA: '빅드림', nameB: '상대팀', 
-        scoreA: 0, scoreB: 0, 
-        inning: 1, isTop: true, 
-        base1: false, base2: false, base3: false, 
-        b: 0, s: 0, o: 0 
+    // 저장된 데이터 불러오기 또는 초기화
+    let state = JSON.parse(localStorage.getItem('baseball_score_state')) || { 
+        nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0, inning: 1, isTop: true, 
+        base1: false, base2: false, base3: false, b: 0, s: 0, o: 0 
     };
 
-    peer.on('open', connect);
-    
-    function connect() {
+    function updateStatus(msg, color) {
+        const st = document.getElementById('status');
+        st.innerHTML = msg; st.style.color = color;
+    }
+
+    function initConnection() {
+        if (peer.disconnected) peer.reconnect();
+        if (conn) conn.close();
         conn = peer.connect(TARGET_ID);
         conn.on('open', () => {
-            document.getElementById('status').innerText = "✅ 방송 화면에 연결됨 (제어 가능)";
-            document.getElementById('status').style.color = "#32D74B";
-            document.getElementById('status').style.background = "#113311";
-            send();
-        });
-        conn.on('close', () => {
-            document.getElementById('status').innerText = "⚠️ 연결 끊김. 재연결 중...";
-            document.getElementById('status').style.color = "#FF453A";
-            setTimeout(connect, 2000);
+            updateStatus("✅ 방송 연결됨 <button onclick='initConnection()' style='background:#444; border:none; color:white; padding:2px 8px; margin-left:5px;'>🔄</button>", "#32D74B");
+            saveAndSend();
         });
     }
 
-    // 화면 업데이트 및 데이터 전송
-    function send() {
+    peer.on('open', initConnection);
+    setInterval(() => { if (!conn || !conn.open) initConnection(); }, 4000);
+
+    function saveAndSend() {
         state.nameA = document.getElementById('in-name-a').value;
         state.nameB = document.getElementById('in-name-b').value;
+        localStorage.setItem('baseball_score_state', JSON.stringify(state));
         
-        // 텍스트 및 점수 업데이트
         document.getElementById('disp-score-a').innerText = state.scoreA;
         document.getElementById('disp-score-b').innerText = state.scoreB;
         document.getElementById('disp-inning').innerText = state.inning + "회 " + (state.isTop ? '초' : '말');
-        
-        // 베이스 불빛 업데이트
-        for(let i=1; i<=3; i++) {
-            document.getElementById('btn-base'+i).classList.toggle('on', state['base'+i]);
-        }
-        
-        // BSO 불빛 업데이트
+        for(let i=1; i<=3; i++) document.getElementById('btn-base'+i).classList.toggle('on', state['base'+i]);
         for(let i=1; i<=3; i++) document.getElementById('rb'+i)?.classList.toggle('on', state.b >= i);
         for(let i=1; i<=2; i++) document.getElementById('rs'+i)?.classList.toggle('on', state.s >= i);
         for(let i=1; i<=2; i++) document.getElementById('ro'+i)?.classList.toggle('on', state.o >= i);
-
-        // 뷰어로 데이터 쏘기
+        
         if (conn && conn.open) conn.send(state);
     }
 
-    // 각종 조작 함수들
-    function addScore(t, v) { 
-        if(t==='a') state.scoreA = Math.max(0, state.scoreA + v); 
-        else state.scoreB = Math.max(0, state.scoreB + v); 
-        send(); 
-    }
-    
-    function toggleBase(n) { 
-        state['base'+n] = !state['base'+n]; 
-        send(); 
-    }
-    
-    function addBSO(t) { 
-        state[t]++; 
-        if(t==='b' && state.b > 3) state.b = 0; 
-        if(t==='s' && state.s > 2) state.s = 0; 
-        if(t==='o' && state.o > 2) state.o = 0; 
-        send(); 
-    }
-    
-    function resetBSO() { 
-        state.b = 0; state.s = 0; state.o = 0; 
-        send(); 
-    }
-    
-    function changeInning(v) {
-        if(v === 1) { 
-            if(state.isTop) state.isTop = false; 
-            else { state.isTop = true; state.inning++; }
-        } else { 
-            if(!state.isTop) state.isTop = true; 
-            else { state.isTop = false; state.inning = Math.max(1, state.inning - 1); }
-        }
-        resetBSO()
-        send();
-    }
+    function addScore(t, v) { if(t==='a') state.scoreA=Math.max(0, state.scoreA+v); else state.scoreB=Math.max(0, state.scoreB+v); saveAndSend(); }
+    function toggleBase(n) { state['base'+n]=!state['base'+n]; saveAndSend(); }
+    function addBSO(t) { state[t]++; if(t==='b'&&state.b>3) state.b=0; if(t==='s'&&state.s>2) state.s=0; if(t==='o'&&state.o>2) state.o=0; saveAndSend(); }
+    function resetBSO() { state.b=0; state.s=0; state.o=0; saveAndSend(); }
+    function changeInning(v) { if(v===1){ if(state.isTop)state.isTop=false; else{state.isTop=true; state.inning++;}} else{ if(!state.isTop)state.isTop=true; else{state.isTop=false; state.inning=Math.max(1, state.inning-1);}} saveAndSend(); }
+
+    document.getElementById('in-name-a').value = state.nameA;
+    document.getElementById('in-name-b').value = state.nameB;
+    saveAndSend();
 </script>
 </body>
 </html>
