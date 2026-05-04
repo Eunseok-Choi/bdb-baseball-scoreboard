@@ -97,7 +97,7 @@
     const peer = new Peer();
     let conn;
 
-    // ★ 여기에 각 클래스별 선수 명단을 배열로 추가해 주시면 됩니다.
+    // ★ 각 클래스별 선수 명단
     const PLAYERS = {
         "새싹": ["최지호", "양현준", "김재윤", "유하진", "홍현서", "손우진", "나라온", "김리호", "나라찬", "이승빈"],
         "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "꿈나무9", "최지호", "김재윤", "유하진", "홍현서"],
@@ -107,14 +107,23 @@
     const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
     const CLASSES = ["새싹", "꿈나무", "유소년"];
 
-    // 데이터 복구 (기존 데이터 구조가 다르면 초기화)
-    let savedState = JSON.parse(localStorage.getItem('baseball_multiclass_state'));
+    // ==========================================
+    // 📅 오늘 날짜를 구해서 저장소(DB) 키 이름으로 사용
+    // ==========================================
+    const today = new Date();
+    // 2026-05-04 형식으로 생성
+    const dateString = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    // 날짜가 포함된 고유 저장 키 (내일 접속하면 이름이 바뀌어서 캐시가 완전 초기화됨)
+    const STORAGE_KEY = 'baseball_lineup_' + dateString;
+
+    // 오늘 날짜의 데이터 복구 시도
+    let savedState = JSON.parse(localStorage.getItem(STORAGE_KEY));
     let state;
 
     if (savedState && savedState.lineups) {
         state = savedState;
     } else {
-        // 완전 초기화 (클래스별 독립된 라인업과 투수 기록 생성)
+        // 완전 초기화 (새로운 날짜에 접속하거나 데이터가 없으면 무조건 '새싹'으로 세팅됨)
         state = { mode: 'offense', currentClass: '새싹', activeIdx: 0, lineups: {}, pitchers: {} };
         CLASSES.forEach(cls => {
             state.lineups[cls] = Array(9).fill(null).map((_, i) => ({ name: PLAYERS[cls][i] || '선수', pos: POSITIONS[i] || 'DH', results: [] }));
@@ -201,7 +210,8 @@
     function resetP() { state.pitchers[state.currentClass].count = 0; updateUI(); send(); }
     function changePitcher() { state.pitchers[state.currentClass].name = document.getElementById('sel-pitcher').value; save(); send(); }
 
-    function save() { localStorage.setItem('baseball_multiclass_state', JSON.stringify(state)); }
+    // 📅 매 변경사항마다 오늘 날짜 키에 저장
+    function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
 
     function updateUI() {
         save();
