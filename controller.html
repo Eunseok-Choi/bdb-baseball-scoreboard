@@ -76,7 +76,7 @@
         <button style="background:#FF453A" onclick="addBSO('o')">아웃 (O)</button>
         <div style="display:flex; gap:8px;"><div id="ro1" class="dot O"></div><div id="ro2" class="dot O"></div></div>
     </div>
-    <button style="background:#444; width:100%; margin-top:5px;" onclick="resetBSO()">BSO 초기화</button>
+    <button style="background:#444; width:100%; margin-top:5px;" onclick="resetBSO()">BSO 전체 초기화</button>
 </div>
 
 <script>
@@ -125,10 +125,49 @@
     }
 
     function addScore(t, v) { if(t==='a') state.scoreA=Math.max(0, state.scoreA+v); else state.scoreB=Math.max(0, state.scoreB+v); saveAndSend(); }
+    
     function toggleBase(n) { state['base'+n]=!state['base'+n]; saveAndSend(); }
-    function addBSO(t) { state[t]++; if(t==='b'&&state.b>3) state.b=0; if(t==='s'&&state.s>2) state.s=0; if(t==='o'&&state.o>2) state.o=0; saveAndSend(); }
+    
+    // ★ BSO 카운트 제어 핵심 로직
+    function addBSO(t) { 
+        state[t]++; 
+        if(t === 'b' && state.b > 3) state.b = 0; 
+        if(t === 's' && state.s > 2) state.s = 0; 
+        
+        // 아웃을 눌렀을 때의 동작 (볼, 스트라이크 초기화)
+        if(t === 'o') {
+            state.b = 0; 
+            state.s = 0; 
+            if(state.o > 2) {
+                state.o = 0; // 쓰리아웃 시 아웃카운트를 0으로 비움
+                // 공수교대(이닝변경)는 자동으로 넘기지 않고 수동 조작을 위해 남겨둠
+            }
+        }
+        saveAndSend(); 
+    }
+    
     function resetBSO() { state.b=0; state.s=0; state.o=0; saveAndSend(); }
-    function changeInning(v) { if(v===1){ if(state.isTop)state.isTop=false; else{state.isTop=true; state.inning++;}} else{ if(!state.isTop)state.isTop=true; else{state.isTop=false; state.inning=Math.max(1, state.inning-1);}} saveAndSend(); }
+    
+    // ★ 이닝 변경 시 제어 로직
+    function changeInning(v) { 
+        if(v===1) { 
+            if(state.isTop) state.isTop=false; 
+            else {state.isTop=true; state.inning++;}
+        } else { 
+            if(!state.isTop) state.isTop=true; 
+            else {state.isTop=false; state.inning=Math.max(1, state.inning-1);}
+        }
+        
+        // 이닝이 바뀌면(공수교대) 베이스의 모든 주자와 아웃/볼/스트라이크 카운트를 싹 비웁니다.
+        state.base1 = false;
+        state.base2 = false;
+        state.base3 = false;
+        state.b = 0;
+        state.s = 0;
+        state.o = 0;
+        
+        saveAndSend(); 
+    }
 
     document.getElementById('in-name-a').value = state.nameA;
     document.getElementById('in-name-b').value = state.nameB;
