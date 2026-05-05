@@ -2,20 +2,43 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>야구 뷰어</title>
+    <title>빅드림 스코어 보드 </title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
+        :root {
+            /* 🎚️ 여기서 전체 크기를 조절하세요! 
+               1.0 = 원본 크기
+               0.5 = 가로세로 절반 (전체 면적 25%) 
+               0.6 = 적당히 작은 크기 */
+            --scale-factor: 0.55; 
+        }
+
         body { margin: 0; background: transparent; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; }
-        .master-container { width: 360px; margin: 10px; display: flex; flex-direction: column; gap: 8px; }
+        
+        /* 마스터 컨테이너에 스케일 속성 적용 */
+        .master-container { 
+            width: 360px; 
+            margin: 10px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 8px; 
+            
+            /* 축소 마법: 원본 비율을 유지한 채 좌측 상단을 기준으로 크기만 줄어듭니다 */
+            transform: scale(var(--scale-factor));
+            transform-origin: top left;
+        }
+
         .scoreboard { background: rgba(0, 0, 0, 0.92); padding: 12px; border: 1px solid #444; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.5); }
         .score-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 8px; margin-bottom: 10px; }
         .team-box { flex: 1.5; text-align: center; font-size: 20px; font-weight: 800; }
         .score-box { flex: 1; text-align: center; font-size: 36px; font-weight: 900; color: #FFD700; text-shadow: 2px 2px 4px black; }
         .info-row { display: flex; align-items: center; justify-content: space-between; padding: 0 5px; }
+        
         .bases-container { width: 80px; height: 65px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .base { width: 16px; height: 16px; border: 3.5px solid #666; transform: rotate(45deg); transition: background-color 0.2s, border-color 0.2s; background-color: transparent; }
         .base.on { background-color: #FFD600; border-color: #FFD600; box-shadow: 0 0 6px #FFD600; }
         .base-row-mid { display: flex; gap: 18px; margin-top: -3px; }
+        
         .bso-container { display: flex; flex-direction: column; gap: 4px; flex-grow: 1; padding-left: 25px; }
         .count-row { display: flex; align-items: center; gap: 6px; font-weight: 900; font-size: 16px; }
         .bso-label { display: inline-block; width: 14px; text-align: left; }
@@ -23,16 +46,19 @@
         .dot.B.on { background: #00FF41; border-color: #00FF41; box-shadow: 0 0 8px #00FF41; }
         .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; box-shadow: 0 0 8px #FFEB3B; }
         .dot.O.on { background: #FF3B30; border-color: #FF3B30; box-shadow: 0 0 8px #FF3B30; }
+        
         .inning-box { width: 60px; text-align: center; display: flex; flex-direction: column; align-items: center; font-size: 20px; font-weight: 800; }
         .triangle { width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; margin-top: 4px; }
         .triangle.up { border-bottom: 18px solid #FF3B30; } 
         .triangle.down { border-top: 18px solid #FF3B30; }
+        
         .lineup-bar { background: rgba(30, 30, 30, 0.95); padding: 5px 15px; border: 1px solid #444; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.4); font-size: 13px; font-weight: 700; min-height: 24px; display: flex; align-items: center; width: 100%; box-sizing: border-box; }
         #lineup-text { width: 100%; color: #eee; letter-spacing: -0.2px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
 <div class="master-container">
+    <!-- 상단 스코어보드 -->
     <div class="scoreboard">
         <div class="score-row">
             <div class="team-box" id="name-a">빅드림</div>
@@ -40,24 +66,45 @@
             <div class="team-box" id="name-b">상대팀</div>
         </div>
         <div class="info-row">
-            <div class="bases-container"><div id="base2" class="base"></div><div class="base-row-mid"><div id="base3" class="base"></div><div id="base1" class="base"></div></div></div>
+            <div class="bases-container">
+                <div id="base2" class="base"></div>
+                <div class="base-row-mid">
+                    <div id="base3" class="base"></div>
+                    <div id="base1" class="base"></div>
+                </div>
+            </div>
             <div class="bso-container">
                 <div class="count-row"><span class="bso-label">B</span> <div id="b1" class="dot B"></div> <div id="b2" class="dot B"></div> <div id="b3" class="dot B"></div></div>
                 <div class="count-row"><span class="bso-label">S</span> <div id="s1" class="dot S"></div> <div id="s2" class="dot S"></div></div>
                 <div class="count-row"><span class="bso-label">O</span> <div id="o1" class="dot O"></div> <div id="o2" class="dot O"></div></div>
             </div>
-            <div class="inning-box"><span id="inning-num">1</span><div id="inning-tri" class="triangle up"></div></div>
+            <div class="inning-box">
+                <span id="inning-num">1</span>
+                <div id="inning-tri" class="triangle up"></div>
+            </div>
         </div>
     </div>
-    <div class="lineup-bar"><div id="lineup-text">준비 중...</div></div>
+    
+    <!-- 하단 라인업 바 -->
+    <div class="lineup-bar">
+        <div id="lineup-text">라인업 입력중...</div>
+    </div>
 </div>
+
 <script>
     const MY_ID = 'jiho-papa-live-viewer'; 
     const peer = new Peer(MY_ID);
+
     peer.on('connection', (conn) => {
         conn.on('data', (data) => {
-            if (data.html !== undefined) { document.getElementById('lineup-text').innerHTML = data.html; } 
-            else if (data.text !== undefined) { document.getElementById('lineup-text').innerText = data.text; }
+            // 라인업 리모컨에서 온 데이터 처리
+            if (data.html !== undefined) { 
+                document.getElementById('lineup-text').innerHTML = data.html; 
+            } 
+            else if (data.text !== undefined) { 
+                document.getElementById('lineup-text').innerText = data.text; 
+            }
+            // 스코어 리모컨에서 온 데이터 처리
             else {
                 document.getElementById('name-a').innerText = data.nameA;
                 document.getElementById('name-b').innerText = data.nameB;
