@@ -32,7 +32,7 @@
         .bso-card { display: flex; flex-direction: column; gap: 8px; }
         .bso-row { display: flex; align-items: center; gap: 10px; }
         /* 💡 BSO 동그라미 크기 축소 (18px -> 14px) */
-        .dot { width: 14px; height: 14px; border-radius: 50%; background: #333; border: 1px solid #555; }
+        .dot { width: 18px; height: 18px; border-radius: 50%; background: #333; border: 1px solid #555; }
         .dot.B.on { background: #00FF41; border-color: #00FF41; }
         .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; }
         .dot.O.on { background: #FF3B30; border-color: #FF3B30; }
@@ -103,15 +103,15 @@
 
         <div class="bso-card">
             <div class="bso-row">
-                <button class="btn-s" style="flex:0 0 50px; background:#32D74B; color:black; padding:5px;" onclick="addBSO('b')">B</button>
+                <button class="btn-s" style="flex:0 0 50px; background:#32D74B; color:black; padding:5px;" onclick="addBSO('b')">Ball</button>
                 <div style="display:flex; gap:6px;"><div id="mb1" class="dot B"></div><div id="mb2" class="dot B"></div><div id="mb3" class="dot B"></div></div>
             </div>
             <div class="bso-row">
-                <button class="btn-s" style="flex:0 0 50px; background:#FFD60A; color:black; padding:5px;" onclick="addBSO('s')">S</button>
+                <button class="btn-s" style="flex:0 0 50px; background:#FFD60A; color:black; padding:5px;" onclick="addBSO('s')">Strike</button>
                 <div style="display:flex; gap:6px;"><div id="ms1" class="dot S"></div><div id="ms2" class="dot S"></div></div>
             </div>
             <div class="bso-row">
-                <button class="btn-s" style="flex:0 0 50px; background:#FF3B30; padding:5px;" onclick="addBSO('o')">O</button>
+                <button class="btn-s" style="flex:0 0 50px; background:#FF3B30; padding:5px;" onclick="addBSO('o')">Out</button>
                 <div style="display:flex; gap:6px;"><div id="mo1" class="dot O"></div><div id="mo2" class="dot O"></div></div>
             </div>
             
