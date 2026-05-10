@@ -31,7 +31,8 @@
         
         .bso-card { display: flex; flex-direction: column; gap: 8px; }
         .bso-row { display: flex; align-items: center; gap: 10px; }
-        .dot { width: 18px; height: 18px; border-radius: 50%; background: #333; border: 1px solid #555; }
+        /* 💡 BSO 동그라미 크기 축소 (18px -> 14px) */
+        .dot { width: 14px; height: 14px; border-radius: 50%; background: #333; border: 1px solid #555; }
         .dot.B.on { background: #00FF41; border-color: #00FF41; }
         .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; }
         .dot.O.on { background: #FF3B30; border-color: #FF3B30; }
@@ -95,15 +96,24 @@
             </div>
             <div class="inning-ctrl" style="text-align:center;">
                 <div id="disp-inning" style="font-size:20px; font-weight:bold; margin-bottom:5px;">1회 초</div>
-                <button style="background:#32D74B; width:100%; border:none; padding:8px; border-radius:5px; font-weight:bold;" onclick="changeInning(1)">다음 차례 ⏭</button>
-                <button style="background:#666; width:100%; border:none; padding:5px; border-radius:5px; margin-top:5px; font-size:12px; color:white;" onclick="changeInning(-1)">이전</button>
+                <button style="background:#32D74B; width:100%; border:none; padding:8px; border-radius:5px; font-weight:bold; color:black;" onclick="changeInning(1)">다음 이닝 ⏭</button>
+                <button style="background:#666; width:100%; border:none; padding:5px; border-radius:5px; margin-top:5px; font-size:12px; color:white;" onclick="changeInning(-1)">이전 이닝 ⏮</button>
             </div>
         </div>
 
         <div class="bso-card">
-            <div class="bso-row"><button class="btn-s" style="background:#32D74B; color:black; padding:5px;" onclick="addBSO('b')">B</button><div id="mb1" class="dot B"></div><div id="mb2" class="dot B"></div><div id="mb3" class="dot B"></div></div>
-            <div class="bso-row"><button class="btn-s" style="background:#FFD60A; color:black; padding:5px;" onclick="addBSO('s')">S</button><div id="ms1" class="dot S"></div><div id="ms2" class="dot S"></div></div>
-            <div class="bso-row"><button class="btn-s" style="background:#FF3B30; padding:5px;" onclick="addBSO('o')">O</button><div id="mo1" class="dot O"></div><div id="mo2" class="dot O"></div></div>
+            <div class="bso-row">
+                <button class="btn-s" style="flex:0 0 50px; background:#32D74B; color:black; padding:5px;" onclick="addBSO('b')">B</button>
+                <div style="display:flex; gap:6px;"><div id="mb1" class="dot B"></div><div id="mb2" class="dot B"></div><div id="mb3" class="dot B"></div></div>
+            </div>
+            <div class="bso-row">
+                <button class="btn-s" style="flex:0 0 50px; background:#FFD60A; color:black; padding:5px;" onclick="addBSO('s')">S</button>
+                <div style="display:flex; gap:6px;"><div id="ms1" class="dot S"></div><div id="ms2" class="dot S"></div></div>
+            </div>
+            <div class="bso-row">
+                <button class="btn-s" style="flex:0 0 50px; background:#FF3B30; padding:5px;" onclick="addBSO('o')">O</button>
+                <div style="display:flex; gap:6px;"><div id="mo1" class="dot O"></div><div id="mo2" class="dot O"></div></div>
+            </div>
             
             <div style="display:flex; gap:5px; margin-top:5px;">
                 <button class="reset-btn" style="flex:1; background:#666;" onclick="resetBS()">B/S 초기화</button>
@@ -218,17 +228,16 @@
     function addScore(f, v) { scoreState[f] = Math.max(0, scoreState[f] + v); updateScoreState(); }
     function toggleBase(n) { scoreState['base'+n] = !scoreState['base'+n]; updateScoreState(); }
 
-    // 💡 야구 규칙 룰 자동화 로직
     function addBSO(t) {
         if(t === 'b') {
             scoreState.b++;
-            if(scoreState.b > 3) { // 4볼 출루
+            if(scoreState.b > 3) {
                 scoreState.b = 0; 
                 scoreState.s = 0; 
             }
         } else if(t === 's') {
             scoreState.s++;
-            if(scoreState.s > 2) { // 3진 아웃
+            if(scoreState.s > 2) {
                 scoreState.s = 0; 
                 scoreState.b = 0; 
                 scoreState.o++; 
@@ -239,12 +248,10 @@
             scoreState.s = 0;
         }
         
-        // 3아웃 처리
         if(scoreState.o > 2) scoreState.o = 0; 
         updateScoreState();
     }
 
-    // 💡 명시적 초기화 버튼 함수들
     function resetBS() { scoreState.b = 0; scoreState.s = 0; updateScoreState(); }
     function resetBSO() { scoreState.b = 0; scoreState.s = 0; scoreState.o = 0; updateScoreState(); }
 
@@ -278,7 +285,6 @@
         document.getElementById('gm-off').classList.toggle('active', scoreState.gameMode === 'offense');
         document.getElementById('gm-def').classList.toggle('active', scoreState.gameMode === 'defense');
         
-        // 💡 공/수 모드에 따른 UI 동적 전환
         document.getElementById('offense-controls').style.display = scoreState.gameMode === 'offense' ? 'block' : 'none';
         document.getElementById('defense-controls').style.display = scoreState.gameMode === 'defense' ? 'block' : 'none';
         document.getElementById('btn-next-batter').style.display = scoreState.gameMode === 'offense' ? 'block' : 'none';
@@ -302,7 +308,7 @@
         if(scoreState.gameMode === 'offense') {
             const b = lineupState[scoreState.currentClass].list[lineupState[scoreState.currentClass].activeIdx];
             if(b.results.length < 5) b.results.push(r);
-            resetBS(); // 💡 안타, 볼넷 등 출루 결과 발생 시 볼/스트라이크 즉시 초기화
+            resetBS(); // 출루/타격 시 카운트 초기화
         } else { 
             lineupState[scoreState.currentClass].pCount++; 
         }
@@ -338,7 +344,6 @@
     function editPitcher(cls, val) { lineupState[cls].pName = val; saveLineup(); sendLineupData(); }
     function saveLineup() { localStorage.setItem(LINEUP_KEY, JSON.stringify(lineupState)); }
 
-    // 💡 새로운 게임을 위한 전면 초기화
     function globalReset() {
         if(!confirm("⚠️주의⚠️\n현재 입력된 점수, 볼카운트, 투구수, 타자 기록 등 모든 데이터가 0으로 초기화됩니다.\n새로운 경기를 시작하시겠습니까?")) return;
         
