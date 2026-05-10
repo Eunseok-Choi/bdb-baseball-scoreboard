@@ -3,175 +3,378 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>야구 스코어 리모컨</title>
+    <title>통합 야구 컨트롤러</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, sans-serif; background: #121212; color: white; margin: 0; padding: 10px; touch-action: manipulation; overflow-x: hidden; }
+        body { font-family: -apple-system, sans-serif; background: #121212; color: white; margin: 0; padding: 10px; touch-action: manipulation; }
         #status { text-align: center; font-size: 13px; font-weight: bold; color: #FF453A; margin-bottom: 10px; padding: 6px; background: #222; border-radius: 8px; }
         .card { background: #2c2c2e; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-        button { font-size: 16px; font-weight: 800; border: none; border-radius: 8px; cursor: pointer; color: white; padding: 10px; display: flex; align-items: center; justify-content: center; }
-        button:active { opacity: 0.7; }
+        
+        /* 메인 탭 */
+        .main-tab-container { display: flex; gap: 5px; margin-bottom: 10px; }
+        .main-tab-btn { flex: 1; padding: 12px 5px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; background: #444; color: white; }
+        .main-tab-btn.active { background: #FFD700; color: black; }
+
+        /* 스코어보드 조작 UI */
         .grid-score { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .team-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-        .team-input { width: 100%; background: #1c1c1e; border: 1px solid #444; color: white; font-size: 16px; font-weight: bold; text-align: center; padding: 8px 0; border-radius: 6px; min-width: 0; }
+        .team-input { width: 100%; background: #1c1c1e; border: 1px solid #444; color: white; font-size: 14px; text-align: center; padding: 5px; border-radius: 6px; margin-bottom: 5px; }
+        .score-display { text-align: center; font-size: 32px; font-weight: 900; color: #FFD700; }
         .score-ctrl { display: flex; gap: 5px; }
-        .btn-plus { background: #0A84FF; flex: 2; font-size: 20px; }
-        .btn-minus { background: #FF453A; flex: 1; font-size: 20px; }
-        .score-display { text-align: center; font-size: 28px; font-weight: 900; color: #FFD700; margin-top: -5px; }
-        .grid-middle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .base-grid { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100px; }
-        .btn-base { width: 35px; height: 35px; background: #444; border: 2px solid #666; transform: rotate(45deg); margin: 6px; }
+        .btn-s { flex: 1; padding: 10px; font-size: 18px; border-radius: 6px; border: none; color: white; font-weight: bold; }
+        .btn-plus { background: #0A84FF; } .btn-minus { background: #FF453A; }
+
+        .middle-ctrl { display: grid; grid-template-columns: 1.2fr 1fr; gap: 10px; margin: 10px 0; }
+        .base-grid { display: flex; flex-direction: column; align-items: center; gap: 5px; background: #1c1c1e; padding: 10px; border-radius: 10px; }
+        .btn-base { width: 30px; height: 30px; background: #444; border: 2px solid #666; transform: rotate(45deg); }
         .btn-base.on { background: #FFD600; border-color: #FFD600; }
-        .base-row-mid { display: flex; gap: 30px; margin-top: -15px; }
-        .inning-ctrl { display: flex; flex-direction: column; justify-content: center; gap: 8px; text-align: center; }
-        .inning-text { font-size: 20px; font-weight: bold; }
-        .btn-inning { background: #32D74B; font-size: 14px; }
-        .bso-row { display: grid; grid-template-columns: 2fr 3fr; gap: 10px; align-items: center; margin-bottom: 8px; }
-        .dot { width: 20px; height: 20px; border-radius: 50%; background: #333; border: 2px solid #555; }
+        
+        .bso-card { display: flex; flex-direction: column; gap: 8px; }
+        .bso-row { display: flex; align-items: center; gap: 10px; }
+        .dot { width: 18px; height: 18px; border-radius: 50%; background: #333; border: 1px solid #555; }
         .dot.B.on { background: #00FF41; border-color: #00FF41; }
         .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; }
         .dot.O.on { background: #FF3B30; border-color: #FF3B30; }
+
+        /* 하단 타석 실시간 조작 UI */
+        .game-op-card { border-top: 2px solid #444; margin-top: 5px; padding-top: 15px; }
+        .class-sel-row { display: flex; gap: 5px; margin-bottom: 10px; }
+        .class-small-btn { flex: 1; padding: 8px; font-size: 12px; border-radius: 5px; border: 1px solid #555; background: #222; color: #ccc; font-weight: bold; }
+        .class-small-btn.active { background: #32D74B; color: black; border-color: #32D74B; }
+        
+        .batter-info-box { background: #000; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .next-btn { background: #0A84FF; padding: 10px 15px; font-size: 14px; border-radius: 8px; border: none; color: white; font-weight: bold; }
+        
+        .res-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+        .btn-res { padding: 12px 5px; font-size: 14px; border-radius: 5px; border: none; background: #444; color: white; font-weight: bold; }
+        .btn-res.hit { background: #32D74B; color: black; }
+        .btn-res.hr { background: #FFD60A; color: black; }
+
+        /* 라인업 설정 UI */
+        .order-item { display: flex; align-items: center; gap: 5px; background: #3a3a3c; padding: 6px; border-radius: 8px; margin-bottom: 5px; }
+        .player-sel { flex: 3; background: #1c1c1e; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; font-size: 14px; }
+        .pos-sel { flex: 1.5; background: #222; color: #FFD700; border: 1px solid #555; padding: 6px; border-radius: 4px; font-size: 12px; }
+        
+        /* 초기화 버튼 공통 */
+        .reset-btn { border:none; padding:8px; border-radius:5px; color:white; font-weight:bold; cursor:pointer; }
     </style>
 </head>
 <body>
 
-<div id="status">📡 방송 연결 시도 중...</div>
+<div id="status">📡 연결 중...</div>
 
-<div class="card grid-score">
-    <div class="team-col">
-        <input type="text" id="in-name-a" class="team-input" value="빅드림" onchange="saveAndSend()">
-        <div class="score-display" id="disp-score-a">0</div>
-        <div class="score-ctrl"><button class="btn-minus" onclick="addScore('a', -1)">-</button><button class="btn-plus" onclick="addScore('a', 1)">+</button></div>
-    </div>
-    <div class="team-col">
-        <input type="text" id="in-name-b" class="team-input" value="상대팀" onchange="saveAndSend()">
-        <div class="score-display" id="disp-score-b">0</div>
-        <div class="score-ctrl"><button class="btn-minus" onclick="addScore('b', -1)">-</button><button class="btn-plus" onclick="addScore('b', 1)">+</button></div>
-    </div>
+<div class="main-tab-container">
+    <button id="mtab-score" class="main-tab-btn active" onclick="setMainTab('score')">🎮 스코어</button>
+    <button id="mtab-새싹" class="main-tab-btn" onclick="setMainTab('새싹')">🌱 새싹</button>
+    <button id="mtab-꿈나무" class="main-tab-btn" onclick="setMainTab('꿈나무')">🌿 꿈나무</button>
+    <button id="mtab-유소년" class="main-tab-btn" onclick="setMainTab('유소년')">⚾ 유소년</button>
 </div>
 
-<div class="card grid-middle">
-    <div class="base-grid">
-        <div id="btn-base2" class="btn-base" onclick="toggleBase(2)"></div>
-        <div class="base-row-mid"><div id="btn-base3" class="btn-base" onclick="toggleBase(3)"></div><div id="btn-base1" class="btn-base" onclick="toggleBase(1)"></div></div>
+<div id="panel-score">
+    <div class="card">
+        <div class="grid-score">
+            <div class="team-col">
+                <input type="text" id="nameA" class="team-input" onchange="updateScoreState()">
+                <div class="score-display" id="disp-scoreA">0</div>
+                <div class="score-ctrl"><button class="btn-s btn-minus" onclick="addScore('scoreA',-1)">-</button><button class="btn-s btn-plus" onclick="addScore('scoreA',1)">+</button></div>
+            </div>
+            <div class="team-col">
+                <input type="text" id="nameB" class="team-input" onchange="updateScoreState()">
+                <div class="score-display" id="disp-scoreB">0</div>
+                <div class="score-ctrl"><button class="btn-s btn-minus" onclick="addScore('scoreB',-1)">-</button><button class="btn-s btn-plus" onclick="addScore('scoreB',1)">+</button></div>
+            </div>
+        </div>
+        
+        <div class="middle-ctrl">
+            <div class="base-grid">
+                <div id="mbase2" class="btn-base" onclick="toggleBase(2)"></div>
+                <div style="display:flex; gap:35px; margin-top:-10px;">
+                    <div id="mbase3" class="btn-base" onclick="toggleBase(3)"></div>
+                    <div id="mbase1" class="btn-base" onclick="toggleBase(1)"></div>
+                </div>
+            </div>
+            <div class="inning-ctrl" style="text-align:center;">
+                <div id="disp-inning" style="font-size:20px; font-weight:bold; margin-bottom:5px;">1회 초</div>
+                <button style="background:#32D74B; width:100%; border:none; padding:8px; border-radius:5px; font-weight:bold;" onclick="changeInning(1)">다음 차례 ⏭</button>
+                <button style="background:#666; width:100%; border:none; padding:5px; border-radius:5px; margin-top:5px; font-size:12px; color:white;" onclick="changeInning(-1)">이전</button>
+            </div>
+        </div>
+
+        <div class="bso-card">
+            <div class="bso-row"><button class="btn-s" style="background:#32D74B; color:black; padding:5px;" onclick="addBSO('b')">B</button><div id="mb1" class="dot B"></div><div id="mb2" class="dot B"></div><div id="mb3" class="dot B"></div></div>
+            <div class="bso-row"><button class="btn-s" style="background:#FFD60A; color:black; padding:5px;" onclick="addBSO('s')">S</button><div id="ms1" class="dot S"></div><div id="ms2" class="dot S"></div></div>
+            <div class="bso-row"><button class="btn-s" style="background:#FF3B30; padding:5px;" onclick="addBSO('o')">O</button><div id="mo1" class="dot O"></div><div id="mo2" class="dot O"></div></div>
+            
+            <div style="display:flex; gap:5px; margin-top:5px;">
+                <button class="reset-btn" style="flex:1; background:#666;" onclick="resetBS()">B/S 초기화</button>
+                <button class="reset-btn" style="flex:1; background:#FF453A;" onclick="resetBSO()">BSO 전체 초기화</button>
+            </div>
+        </div>
     </div>
-    <div class="inning-ctrl">
-        <div class="inning-text" id="disp-inning">1회 초</div>
-        <button class="btn-inning" onclick="changeInning(1)">다음 차례 ⏭</button>
-        <button class="btn-inning" style="background:#666" onclick="changeInning(-1)">이전 ⏮</button>
+
+    <div class="card game-op-card">
+        <div class="class-sel-row">
+            <button id="cs-새싹" class="class-small-btn" onclick="changeGameClass('새싹')">새싹</button>
+            <button id="cs-꿈나무" class="class-small-btn" onclick="changeGameClass('꿈나무')">꿈나무</button>
+            <button id="cs-유소년" class="class-small-btn" onclick="changeGameClass('유소년')">유소년</button>
+        </div>
+        <div style="display:flex; gap:5px; margin-bottom:10px;">
+            <button id="gm-off" class="class-small-btn" onclick="setGameMode('offense')" style="flex:1">공격(타자)</button>
+            <button id="gm-def" class="class-small-btn" onclick="setGameMode('defense')" style="flex:1">수비(투수)</button>
+        </div>
+        
+        <div class="batter-info-box">
+            <div id="live-batter-name" style="font-size:18px; font-weight:bold; color:#FFD700;">타자 정보</div>
+            <button id="btn-next-batter" class="next-btn" onclick="nextBatter()">다음 타자 ⚾</button>
+        </div>
+
+        <div id="offense-controls">
+            <div class="res-grid">
+                <button class="btn-res" onclick="addGameRes('뜬공')">뜬공</button>
+                <button class="btn-res" onclick="addGameRes('땅볼')">땅볼</button>
+                <button class="btn-res" onclick="addGameRes('삼진')">삼진</button>
+                
+                <button class="btn-res hit" onclick="addGameRes('볼넷')">볼넷</button>
+                <button class="btn-res hit" onclick="addGameRes('사구')">사구</button>
+                <button class="btn-res hit" onclick="addGameRes('안타')">안타</button>
+                
+                <button class="btn-res hit" onclick="addGameRes('2루타')">2루타</button>
+                <button class="btn-res hit" onclick="addGameRes('3루타')">3루타</button>
+                <button class="btn-res hr" onclick="addGameRes('홈런')">홈런</button>
+            </div>
+            <button style="width:100%; background:#FF3B30; border:none; padding:8px; border-radius:5px; margin-top:10px; font-weight:bold; color:white;" onclick="undoGameRes()">마지막 입력 취소</button>
+        </div>
+
+        <div id="defense-controls" style="display:none;">
+            <div style="display:flex; gap:10px;">
+                <button style="flex:1; background:#444; padding:15px; font-size:20px; border-radius:8px; color:white; border:none; font-weight:bold;" onclick="undoGameRes()">-1구</button>
+                <button style="flex:2; background:#32D74B; padding:15px; font-size:20px; border-radius:8px; color:black; font-weight:bold; border:none;" onclick="addGameRes()">+1 투구</button>
+            </div>
+        </div>
     </div>
+
+    <button onclick="globalReset()" style="width:100%; background:#8B0000; color:white; border:none; padding:15px; border-radius:8px; margin-top:20px; font-weight:bold; font-size:15px; margin-bottom: 20px;">🚨 경기 전면 초기화 (새로운 게임 시작)</button>
 </div>
 
-<div class="card">
-    <div class="bso-row">
-        <button style="background:#32D74B; color:black" onclick="addBSO('b')">볼 (B)</button>
-        <div style="display:flex; gap:8px;"><div id="rb1" class="dot B"></div><div id="rb2" class="dot B"></div><div id="rb3" class="dot B"></div></div>
+<div id="panel-lineup" style="display:none;">
+    <div class="card">
+        <h3 id="lineup-title" style="margin:0 0 15px 0; color:#FFD700;">새싹 라인업</h3>
+        <div id="lineup-list"></div>
     </div>
-    <div class="bso-row">
-        <button style="background:#FFD60A; color:black" onclick="addBSO('s')">스트라이크 (S)</button>
-        <div style="display:flex; gap:8px;"><div id="rs1" class="dot S"></div><div id="rs2" class="dot S"></div></div>
-    </div>
-    <div class="bso-row">
-        <button style="background:#FF453A" onclick="addBSO('o')">아웃 (O)</button>
-        <div style="display:flex; gap:8px;"><div id="ro1" class="dot O"></div><div id="ro2" class="dot O"></div></div>
-    </div>
-    <button style="background:#444; width:100%; margin-top:5px;" onclick="resetBSO()">BSO 전체 초기화</button>
 </div>
 
 <script>
     const TARGET_ID = 'jiho-papa-live-viewer';
     const peer = new Peer();
     let conn;
-    
-    // 저장된 데이터 불러오기 또는 초기화
-    let state = JSON.parse(localStorage.getItem('baseball_score_state')) || { 
-        nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0, inning: 1, isTop: true, 
-        base1: false, base2: false, base3: false, b: 0, s: 0, o: 0 
+
+    const PLAYERS = {
+        "새싹": ["최지호", "양현준", "김재윤", "유하진", "홍현서", "손우진", "나라온", "김리호", "나라찬", "이승빈"],
+        "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "꿈나무9", "최지호", "김재윤", "유하진", "홍현서"],
+        "유소년": ["최이안", "김지겸", "이승현", "박건희", "구도영", "이현성", "이준성", "신주호", "오종원"]
+    };
+    const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const SCORE_KEY = 'bb_score_' + dateStr;
+    const LINEUP_KEY = 'bb_lineup_' + dateStr;
+
+    let scoreState = JSON.parse(localStorage.getItem(SCORE_KEY)) || {
+        nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0, inning: 1, isTop: true,
+        base1: false, base2: false, base3: false, b: 0, s: 0, o: 0, 
+        currentClass: '새싹', gameMode: 'offense'
     };
 
-    function updateStatus(msg, color) {
-        const st = document.getElementById('status');
-        st.innerHTML = msg; st.style.color = color;
-    }
+    let lineupState = JSON.parse(localStorage.getItem(LINEUP_KEY)) || {
+        새싹: { activeIdx: 0, list: Array(9).fill(null).map((_, i) => ({ name: PLAYERS["새싹"][i]||'선수', pos: POSITIONS[i]||'DH', results: [] })), pName: PLAYERS["새싹"][0], pCount: 0 },
+        꿈나무: { activeIdx: 0, list: Array(9).fill(null).map((_, i) => ({ name: PLAYERS["꿈나무"][i]||'선수', pos: POSITIONS[i]||'DH', results: [] })), pName: PLAYERS["꿈나무"][0], pCount: 0 },
+        유소년: { activeIdx: 0, list: Array(9).fill(null).map((_, i) => ({ name: PLAYERS["유소년"][i]||'선수', pos: POSITIONS[i]||'DH', results: [] })), pName: PLAYERS["유소년"][0], pCount: 0 }
+    };
 
-    function initConnection() {
+    let currentMainTab = 'score';
+
+    function initConn() {
         if (peer.disconnected) peer.reconnect();
         if (conn) conn.close();
         conn = peer.connect(TARGET_ID);
         conn.on('open', () => {
-            updateStatus("✅ 방송 연결됨 <button onclick='initConnection()' style='background:#444; border:none; color:white; padding:2px 8px; margin-left:5px;'>🔄</button>", "#32D74B");
-            saveAndSend();
+            document.getElementById('status').innerHTML = "✅ 방송 연결됨 <button onclick='initConn()' style='padding:2px 5px; font-size:10px; background:#444; border:none; color:white; border-radius:4px;'>🔄</button>";
+            document.getElementById('status').style.color = "#32D74B";
+            syncAll();
         });
     }
+    peer.on('open', initConn);
+    setInterval(() => { if(!conn || !conn.open) initConn(); }, 4000);
 
-    peer.on('open', initConnection);
-    setInterval(() => { if (!conn || !conn.open) initConnection(); }, 4000);
-
-    function saveAndSend() {
-        state.nameA = document.getElementById('in-name-a').value;
-        state.nameB = document.getElementById('in-name-b').value;
-        localStorage.setItem('baseball_score_state', JSON.stringify(state));
-        
-        document.getElementById('disp-score-a').innerText = state.scoreA;
-        document.getElementById('disp-score-b').innerText = state.scoreB;
-        document.getElementById('disp-inning').innerText = state.inning + "회 " + (state.isTop ? '초' : '말');
-        for(let i=1; i<=3; i++) document.getElementById('btn-base'+i).classList.toggle('on', state['base'+i]);
-        for(let i=1; i<=3; i++) document.getElementById('rb'+i)?.classList.toggle('on', state.b >= i);
-        for(let i=1; i<=2; i++) document.getElementById('rs'+i)?.classList.toggle('on', state.s >= i);
-        for(let i=1; i<=2; i++) document.getElementById('ro'+i)?.classList.toggle('on', state.o >= i);
-        
-        if (conn && conn.open) conn.send(state);
+    function setMainTab(tab) {
+        currentMainTab = tab;
+        document.querySelectorAll('.main-tab-btn').forEach(b => b.classList.toggle('active', b.id === 'mtab-'+tab));
+        document.getElementById('panel-score').style.display = tab === 'score' ? 'block' : 'none';
+        document.getElementById('panel-lineup').style.display = tab !== 'score' ? 'block' : 'none';
+        if(tab !== 'score') renderLineupSetup(tab);
+        else updateScoreUI();
     }
 
-    function addScore(t, v) { if(t==='a') state.scoreA=Math.max(0, state.scoreA+v); else state.scoreB=Math.max(0, state.scoreB+v); saveAndSend(); }
-    
-    function toggleBase(n) { state['base'+n]=!state['base'+n]; saveAndSend(); }
-    
-    // ★ BSO 카운트 제어 핵심 로직
-    function addBSO(t) { 
-        state[t]++; 
-        if(t === 'b' && state.b > 3) state.b = 0; 
-        if(t === 's' && state.s > 2) state.s = 0; 
-        
-        // 아웃을 눌렀을 때의 동작 (볼, 스트라이크 초기화)
-        if(t === 'o') {
-            state.b = 0; 
-            state.s = 0; 
-            if(state.o > 2) {
-                state.o = 0; // 쓰리아웃 시 아웃카운트를 0으로 비움
-                // 공수교대(이닝변경)는 자동으로 넘기지 않고 수동 조작을 위해 남겨둠
+    function addScore(f, v) { scoreState[f] = Math.max(0, scoreState[f] + v); updateScoreState(); }
+    function toggleBase(n) { scoreState['base'+n] = !scoreState['base'+n]; updateScoreState(); }
+
+    // 💡 야구 규칙 룰 자동화 로직
+    function addBSO(t) {
+        if(t === 'b') {
+            scoreState.b++;
+            if(scoreState.b > 3) { // 4볼 출루
+                scoreState.b = 0; 
+                scoreState.s = 0; 
             }
-        }
-        saveAndSend(); 
-    }
-    
-    function resetBSO() { state.b=0; state.s=0; state.o=0; saveAndSend(); }
-    
-    // ★ 이닝 변경 시 제어 로직
-    function changeInning(v) { 
-        if(v===1) { 
-            if(state.isTop) state.isTop=false; 
-            else {state.isTop=true; state.inning++;}
-        } else { 
-            if(!state.isTop) state.isTop=true; 
-            else {state.isTop=false; state.inning=Math.max(1, state.inning-1);}
+        } else if(t === 's') {
+            scoreState.s++;
+            if(scoreState.s > 2) { // 3진 아웃
+                scoreState.s = 0; 
+                scoreState.b = 0; 
+                scoreState.o++; 
+            }
+        } else if(t === 'o') {
+            scoreState.o++;
+            scoreState.b = 0;
+            scoreState.s = 0;
         }
         
-        // 이닝이 바뀌면(공수교대) 베이스의 모든 주자와 아웃/볼/스트라이크 카운트를 싹 비웁니다.
-        state.base1 = false;
-        state.base2 = false;
-        state.base3 = false;
-        state.b = 0;
-        state.s = 0;
-        state.o = 0;
-        
-        saveAndSend(); 
+        // 3아웃 처리
+        if(scoreState.o > 2) scoreState.o = 0; 
+        updateScoreState();
     }
 
-    document.getElementById('in-name-a').value = state.nameA;
-    document.getElementById('in-name-b').value = state.nameB;
-    saveAndSend();
+    // 💡 명시적 초기화 버튼 함수들
+    function resetBS() { scoreState.b = 0; scoreState.s = 0; updateScoreState(); }
+    function resetBSO() { scoreState.b = 0; scoreState.s = 0; scoreState.o = 0; updateScoreState(); }
+
+    function changeInning(v) {
+        if(v===1) { if(scoreState.isTop) scoreState.isTop=false; else {scoreState.isTop=true; scoreState.inning++;} }
+        else { if(!scoreState.isTop) scoreState.isTop=true; else {scoreState.isTop=false; scoreState.inning=Math.max(1, scoreState.inning-1);} }
+        scoreState.base1=scoreState.base2=scoreState.base3=scoreState.b=scoreState.s=scoreState.o=false;
+        updateScoreState();
+    }
+
+    function updateScoreState() {
+        scoreState.nameA = document.getElementById('nameA').value;
+        scoreState.nameB = document.getElementById('nameB').value;
+        localStorage.setItem(SCORE_KEY, JSON.stringify(scoreState));
+        updateScoreUI();
+        if(conn && conn.open) conn.send(scoreState);
+    }
+
+    function updateScoreUI() {
+        document.getElementById('nameA').value = scoreState.nameA;
+        document.getElementById('nameB').value = scoreState.nameB;
+        document.getElementById('disp-scoreA').innerText = scoreState.scoreA;
+        document.getElementById('disp-scoreB').innerText = scoreState.scoreB;
+        document.getElementById('disp-inning').innerText = scoreState.inning + "회 " + (scoreState.isTop?'초':'말');
+        for(let i=1; i<=3; i++) document.getElementById('mbase'+i).classList.toggle('on', scoreState['base'+i]);
+        for(let i=1; i<=3; i++) document.getElementById('mb'+i).classList.toggle('on', scoreState.b>=i);
+        for(let i=1; i<=2; i++) document.getElementById('ms'+i).classList.toggle('on', scoreState.s>=i);
+        for(let i=1; i<=2; i++) document.getElementById('mo'+i).classList.toggle('on', scoreState.o>=i);
+        
+        document.querySelectorAll('.class-small-btn').forEach(b => b.classList.toggle('active', b.id === 'cs-'+scoreState.currentClass));
+        document.getElementById('gm-off').classList.toggle('active', scoreState.gameMode === 'offense');
+        document.getElementById('gm-def').classList.toggle('active', scoreState.gameMode === 'defense');
+        
+        // 💡 공/수 모드에 따른 UI 동적 전환
+        document.getElementById('offense-controls').style.display = scoreState.gameMode === 'offense' ? 'block' : 'none';
+        document.getElementById('defense-controls').style.display = scoreState.gameMode === 'defense' ? 'block' : 'none';
+        document.getElementById('btn-next-batter').style.display = scoreState.gameMode === 'offense' ? 'block' : 'none';
+        
+        const curL = lineupState[scoreState.currentClass];
+        const curB = curL.list[curL.activeIdx];
+        document.getElementById('live-batter-name').innerText = scoreState.gameMode === 'offense' ? `${curL.activeIdx+1}.${curB.name}(${curB.pos})` : `P.${curL.pName} (${curL.pCount}구)`;
+    }
+
+    function changeGameClass(cls) { scoreState.currentClass = cls; updateScoreState(); sendLineupData(); }
+    function setGameMode(m) { scoreState.gameMode = m; updateScoreState(); sendLineupData(); }
+    
+    function nextBatter() { 
+        if(scoreState.gameMode === 'offense') {
+            lineupState[scoreState.currentClass].activeIdx = (lineupState[scoreState.currentClass].activeIdx + 1) % 9; 
+        }
+        saveLineup(); sendLineupData(); updateScoreUI(); 
+    }
+
+    function addGameRes(r) {
+        if(scoreState.gameMode === 'offense') {
+            const b = lineupState[scoreState.currentClass].list[lineupState[scoreState.currentClass].activeIdx];
+            if(b.results.length < 5) b.results.push(r);
+            resetBS(); // 💡 안타, 볼넷 등 출루 결과 발생 시 볼/스트라이크 즉시 초기화
+        } else { 
+            lineupState[scoreState.currentClass].pCount++; 
+        }
+        saveLineup(); sendLineupData(); updateScoreUI();
+    }
+
+    function undoGameRes() {
+        if(scoreState.gameMode === 'offense') lineupState[scoreState.currentClass].list[lineupState[scoreState.currentClass].activeIdx].results.pop();
+        else lineupState[scoreState.currentClass].pCount = Math.max(0, lineupState[scoreState.currentClass].pCount - 1);
+        saveLineup(); sendLineupData(); updateScoreUI();
+    }
+
+    function renderLineupSetup(cls) {
+        document.getElementById('lineup-title').innerText = cls + " 라인업 설정";
+        const container = document.getElementById('lineup-list');
+        container.innerHTML = "";
+        lineupState[cls].list.forEach((p, i) => {
+            const div = document.createElement('div');
+            div.className = "order-item";
+            let pOpt = PLAYERS[cls].map(name => `<option value="${name}" ${p.name===name?'selected':''}>${name}</option>`).join('');
+            let posOpt = POSITIONS.map(pos => `<option value="${pos}" ${p.pos===pos?'selected':''}>${pos}</option>`).join('');
+            div.innerHTML = `<span style="width:20px; font-weight:bold; color:#0A84FF;">${i+1}</span><select class="player-sel" onchange="editPlayer('${cls}',${i},'name',this.value)">${pOpt}</select><select class="pos-sel" onchange="editPlayer('${cls}',${i},'pos',this.value)">${posOpt}</select>`;
+            container.appendChild(div);
+        });
+        const pdiv = document.createElement('div');
+        pdiv.className = "card"; pdiv.style.marginTop = "10px";
+        let pListOpt = PLAYERS[cls].map(name => `<option value="${name}" ${lineupState[cls].pName===name?'selected':''}>${name}</option>`).join('');
+        pdiv.innerHTML = `<h4 style="margin:0 0 10px 0; color:#ccc;">투수 설정</h4><select class="player-sel" style="width:100%; padding:10px;" onchange="editPitcher('${cls}',this.value)">${pListOpt}</select><br><button onclick="lineupState['${cls}'].pCount=0;saveLineup();updateScoreUI();" style="margin-top:10px; width:100%; padding:10px; background:#444; border:none; color:white; border-radius:5px; font-weight:bold;">투구수 초기화</button>`;
+        container.appendChild(pdiv);
+    }
+
+    function editPlayer(cls, i, field, val) { lineupState[cls].list[i][field] = val; saveLineup(); sendLineupData(); }
+    function editPitcher(cls, val) { lineupState[cls].pName = val; saveLineup(); sendLineupData(); }
+    function saveLineup() { localStorage.setItem(LINEUP_KEY, JSON.stringify(lineupState)); }
+
+    // 💡 새로운 게임을 위한 전면 초기화
+    function globalReset() {
+        if(!confirm("⚠️주의⚠️\n현재 입력된 점수, 볼카운트, 투구수, 타자 기록 등 모든 데이터가 0으로 초기화됩니다.\n새로운 경기를 시작하시겠습니까?")) return;
+        
+        scoreState.scoreA = 0; scoreState.scoreB = 0;
+        scoreState.inning = 1; scoreState.isTop = true;
+        scoreState.base1 = false; scoreState.base2 = false; scoreState.base3 = false;
+        scoreState.b = 0; scoreState.s = 0; scoreState.o = 0;
+        
+        ["새싹", "꿈나무", "유소년"].forEach(cls => {
+            lineupState[cls].activeIdx = 0;
+            lineupState[cls].pCount = 0;
+            lineupState[cls].list.forEach(b => b.results = []);
+        });
+        
+        updateScoreState();
+        saveLineup();
+        sendLineupData();
+        alert("모든 기록이 깨끗하게 초기화되었습니다!");
+    }
+
+    function sendLineupData() {
+        if(!conn || !conn.open) return;
+        const curL = lineupState[scoreState.currentClass];
+        let html = "";
+        if(scoreState.gameMode === 'offense') {
+            const b = curL.list[curL.activeIdx];
+            html = `<div style="display:flex; justify-content:space-between; width:100%;"><span>${curL.activeIdx+1}.${b.name}(${b.pos})</span><span style="color:#FFD700;">${b.results.join(' &nbsp; ')}</span></div>`;
+        } else {
+            html = `<div style="display:flex; justify-content:space-between; width:100%;"><span>P. ${curL.pName}</span><span>⚾️ ${curL.pCount}</span></div>`;
+        }
+        conn.send({ html });
+    }
+
+    function syncAll() { updateScoreState(); sendLineupData(); }
+
+    setMainTab('score');
 </script>
 </body>
 </html>
