@@ -254,11 +254,36 @@
 
     function resetBS() { scoreState.b = 0; scoreState.s = 0; updateScoreState(); }
     function resetBSO() { scoreState.b = 0; scoreState.s = 0; scoreState.o = 0; updateScoreState(); }
-
     function changeInning(v) {
-        if(v===1) { if(scoreState.isTop) scoreState.isTop=false; else {scoreState.isTop=true; scoreState.inning++;} }
-        else { if(!scoreState.isTop) scoreState.isTop=true; else {scoreState.isTop=false; scoreState.inning=Math.max(1, scoreState.inning-1);} }
-        scoreState.base1=scoreState.base2=scoreState.base3=scoreState.b=scoreState.s=scoreState.o=false;
+        if (v === 1) { 
+            // ⏭ 다음 이닝
+            if (scoreState.isTop) {
+                scoreState.isTop = false; // 초 -> 말
+            } else {
+                scoreState.isTop = true;  // 말 -> 다음 회 초
+                scoreState.inning++;
+            }
+        } else { 
+            // ⏮ 이전 이닝
+            if (!scoreState.isTop) {
+                scoreState.isTop = true;  // 말 -> 초
+            } else {
+                if (scoreState.inning > 1) {
+                    scoreState.isTop = false; // 초 -> 이전 회 말
+                    scoreState.inning--;
+                }
+                // 💡 만약 현재가 1회 초(inning=1, isTop=true)라면 아무 일도 일어나지 않음
+            }
+        }
+        
+        // 주자 및 BSO 초기화
+        scoreState.base1 = false;
+        scoreState.base2 = false;
+        scoreState.base3 = false;
+        scoreState.b = 0;
+        scoreState.s = 0;
+        scoreState.o = 0;
+        
         updateScoreState();
     }
 
