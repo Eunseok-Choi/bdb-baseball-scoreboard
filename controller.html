@@ -10,7 +10,17 @@
         body { font-family: -apple-system, sans-serif; background: #121212; color: white; margin: 0; padding: 10px; touch-action: manipulation; }
         #status { text-align: center; font-size: 13px; font-weight: bold; color: #FF453A; margin-bottom: 10px; padding: 6px; background: #222; border-radius: 8px; }
         .card { background: #2c2c2e; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-        
+
+        /* 접속 암호 게이트 */
+        #gate { position: fixed; inset: 0; background: #121212; z-index: 99999; display: flex; flex-direction: column;
+                align-items: center; justify-content: center; gap: 14px; padding: 24px; }
+        #gate .g-title { font-size: 20px; font-weight: bold; }
+        #gate .g-desc { font-size: 13px; color: #aaa; text-align: center; line-height: 1.5; }
+        #gate input { font-size: 26px; text-align: center; letter-spacing: 10px; width: 180px; padding: 12px;
+                      border-radius: 10px; border: 1px solid #555; background: #1c1c1e; color: white; }
+        #gate button { background: #FFD700; color: black; border: none; padding: 12px 34px; border-radius: 10px; font-size: 16px; font-weight: bold; }
+        #gate .g-err { display: none; color: #FF453A; font-size: 13px; }
+
         /* 메인 탭 */
         .main-tab-container { display: flex; gap: 5px; margin-bottom: 10px; }
         .main-tab-btn { flex: 1; padding: 12px 5px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; background: #444; color: white; }
@@ -28,7 +38,7 @@
         .base-grid { display: flex; flex-direction: column; align-items: center; gap: 5px; background: #1c1c1e; padding: 10px; border-radius: 10px; }
         .btn-base { width: 30px; height: 30px; background: #444; border: 2px solid #666; transform: rotate(45deg); }
         .btn-base.on { background: #FFD600; border-color: #FFD600; }
-        
+
         .bso-card { display: flex; flex-direction: column; gap: 8px; }
         .bso-row { display: flex; align-items: center; gap: 10px; }
         /* 💡 BSO 동그라미 크기 17px로 원복 */
@@ -42,14 +52,14 @@
         .class-sel-row { display: flex; gap: 5px; margin-bottom: 10px; }
         .class-small-btn { flex: 1; padding: 8px; font-size: 12px; border-radius: 5px; border: 1px solid #555; background: #222; color: #ccc; font-weight: bold; }
         .class-small-btn.active { background: #32D74B; color: black; border-color: #32D74B; }
-        
+
         .batter-info-box { background: #000; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-        
+
         /* 💡 이전/다음 타자 버튼 그룹 */
         .nav-btn-group { display: flex; gap: 4px; }
         .nav-btn { background: #0A84FF; padding: 10px 12px; font-size: 13px; border-radius: 6px; border: none; color: white; font-weight: bold; }
         .nav-btn.prev { background: #555; }
-        
+
         /* 💡 결과 버튼 그리드 (4줄로 확장) */
         .res-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
         .btn-res { padding: 12px 5px; font-size: 13px; border-radius: 5px; border: none; background: #444; color: white; font-weight: bold; }
@@ -61,11 +71,20 @@
         .order-item { display: flex; align-items: center; gap: 5px; background: #3a3a3c; padding: 6px; border-radius: 8px; margin-bottom: 5px; }
         .player-sel { flex: 3; background: #1c1c1e; color: white; border: 1px solid #555; padding: 6px; border-radius: 4px; font-size: 14px; }
         .pos-sel { flex: 1.5; background: #222; color: #FFD700; border: 1px solid #555; padding: 6px; border-radius: 4px; font-size: 12px; }
-        
+
         .reset-btn { border:none; padding:8px; border-radius:5px; color:white; font-weight:bold; cursor:pointer; }
     </style>
 </head>
 <body>
+
+<!-- 🔒 접속 암호 게이트(당일 날짜 MMDD) -->
+<div id="gate">
+    <div class="g-title">🔒 인증</div>
+    <input id="gate-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+           autocomplete="off" onkeydown="if(event.key==='Enter')submitGate()">
+    <button onclick="submitGate()">입장</button>
+    <div id="gate-err" class="g-err">암호가 올바르지 않습니다.</div>
+</div>
 
 <div id="status">📡 연결 중...</div>
 
@@ -90,7 +109,7 @@
                 <div class="score-ctrl"><button class="btn-s btn-minus" onclick="addScore('scoreB',-1)">-</button><button class="btn-s btn-plus" onclick="addScore('scoreB',1)">+</button></div>
             </div>
         </div>
-        
+
         <div class="middle-ctrl">
             <div class="base-grid">
                 <div id="mbase2" class="btn-base" onclick="toggleBase(2)"></div>
@@ -119,7 +138,7 @@
                 <button class="btn-s" style="flex:0 0 150px; background:#FF3B30; padding:5px; color:white;" onclick="addBSO('o')">O</button>
                 <div style="display:flex; gap:7px;"><div id="mo1" class="dot O"></div><div id="mo2" class="dot O"></div></div>
             </div>
-            
+
             <div style="display:flex; gap:5px; margin-top:5px;">
                 <button class="reset-btn" style="flex:1; background:#666;" onclick="resetBS()">B/S 초기화</button>
                 <button class="reset-btn" style="flex:1; background:#FF453A;" onclick="resetBSO()">BSO 전체 초기화</button>
@@ -137,7 +156,7 @@
             <button id="gm-off" class="class-small-btn" onclick="setGameMode('offense')" style="flex:1">공격(타자)</button>
             <button id="gm-def" class="class-small-btn" onclick="setGameMode('defense')" style="flex:1">수비(투수)</button>
         </div>
-        
+
         <div class="batter-info-box">
             <div id="live-batter-name" style="font-size:16px; font-weight:bold; color:#FFD700;">타자 정보</div>
             <div class="nav-btn-group" id="batter-nav-group">
@@ -151,15 +170,15 @@
                 <button class="btn-res" onclick="addGameRes('뜬공')">뜬공</button>
                 <button class="btn-res" onclick="addGameRes('땅볼')">땅볼</button>
                 <button class="btn-res" onclick="addGameRes('삼진')">삼진</button>
-                
+
                 <button class="btn-res hit" onclick="addGameRes('볼넷')">볼넷</button>
                 <button class="btn-res hit" onclick="addGameRes('사구')">사구</button>
                 <button class="btn-res hit" onclick="addGameRes('안타')">안타</button>
-                
+
                 <button class="btn-res hit" onclick="addGameRes('2루타')">2루타</button>
                 <button class="btn-res hit" onclick="addGameRes('3루타')">3루타</button>
                 <button class="btn-res hr" onclick="addGameRes('홈런(G)')">홈런(G)</button>
-                
+
                 <button class="btn-res hr" onclick="addGameRes('홈런')">홈런</button>
                 <button class="btn-res out-special" onclick="addGameRes('병살')">병살</button>
                 <button class="btn-res out-special" onclick="addGameRes('삼중살')">삼중살</button>
@@ -181,7 +200,7 @@
 <div id="panel-lineup" style="display:none;">
     <div class="card">
         <h3 id="lineup-title" style="margin:0 0 15px 0; color:#FFD700;">라인업 설정</h3>
-        
+
         <div style="display:flex; gap:5px; margin-bottom:15px; background:#1c1c1e; padding:8px; border-radius:8px;">
             <input type="text" id="new-player-name" placeholder="새로운 선수 이름 입력" style="flex:1; padding:8px; border-radius:5px; border:1px solid #555; background:#2c2c2e; color:white;">
             <button onclick="addNewPlayer()" style="background:#0A84FF; color:white; border:none; padding:8px 15px; border-radius:5px; font-weight:bold; cursor:pointer;">추가</button>
@@ -193,8 +212,8 @@
 
 <script>
     const TARGET_ID = 'jiho-papa-live-viewer';
-    const peer = new Peer();
-    let conn;
+    let peer = null;
+    let conn = null;
 
     const PLAYER_DB_KEY = 'bb_players_master';
     const DEFAULT_PLAYERS = {
@@ -202,7 +221,7 @@
         "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "꿈나무9", "최지호", "김재윤", "유하진", "홍현서"],
         "유소년": ["최이안", "김지겸", "이승현", "박건희", "구도영", "이현성", "이준성", "신주호", "오종원"]
     };
-    
+
     let PLAYERS = JSON.parse(localStorage.getItem(PLAYER_DB_KEY)) || DEFAULT_PLAYERS;
     const POSITIONS = ["P", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"];
 
@@ -212,7 +231,7 @@
 
     let scoreState = JSON.parse(localStorage.getItem(SCORE_KEY)) || {
         nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0, inning: 1, isTop: true,
-        base1: false, base2: false, base3: false, b: 0, s: 0, o: 0, 
+        base1: false, base2: false, base3: false, b: 0, s: 0, o: 0,
         currentClass: '새싹', gameMode: 'offense'
     };
 
@@ -225,6 +244,7 @@
     let currentMainTab = 'score';
 
     function initConn() {
+        if (!peer) return;
         if (peer.disconnected) peer.reconnect();
         if (conn) conn.close();
         conn = peer.connect(TARGET_ID);
@@ -233,9 +253,11 @@
             document.getElementById('status').style.color = "#32D74B";
             syncAll();
         });
+        // 🔄 뷰어(방송앱)가 reload 후 재접속하면 "현재 상태 줘"라고 요청 → 즉시 전체 동기화 응답.
+        conn.on('data', (d) => {
+            if (d && d.req === 'sync') syncAll();
+        });
     }
-    peer.on('open', initConn);
-    setInterval(() => { if(!conn || !conn.open) initConn(); }, 4000);
 
     function setMainTab(tab) {
         currentMainTab = tab;
@@ -259,7 +281,7 @@
         } else if(t === 'o') {
             scoreState.o++; scoreState.b = 0; scoreState.s = 0;
         }
-        if(scoreState.o > 2) scoreState.o = 0; 
+        if(scoreState.o > 2) scoreState.o = 0;
         updateScoreState();
     }
 
@@ -267,11 +289,11 @@
     function resetBSO() { scoreState.b = 0; scoreState.s = 0; scoreState.o = 0; updateScoreState(); }
 
     function changeInning(v) {
-        if (v === 1) { 
-            if (scoreState.isTop) scoreState.isTop = false; 
+        if (v === 1) {
+            if (scoreState.isTop) scoreState.isTop = false;
             else { scoreState.isTop = true; scoreState.inning++; }
-        } else { 
-            if (!scoreState.isTop) scoreState.isTop = true; 
+        } else {
+            if (!scoreState.isTop) scoreState.isTop = true;
             else { if (scoreState.inning > 1) { scoreState.isTop = false; scoreState.inning--; } }
         }
         scoreState.base1 = scoreState.base2 = scoreState.base3 = false;
@@ -297,15 +319,15 @@
         for(let i=1; i<=3; i++) document.getElementById('mb'+i).classList.toggle('on', scoreState.b>=i);
         for(let i=1; i<=2; i++) document.getElementById('ms'+i).classList.toggle('on', scoreState.s>=i);
         for(let i=1; i<=2; i++) document.getElementById('mo'+i).classList.toggle('on', scoreState.o>=i);
-        
+
         document.querySelectorAll('.class-small-btn').forEach(b => b.classList.toggle('active', b.id === 'cs-'+scoreState.currentClass));
         document.getElementById('gm-off').classList.toggle('active', scoreState.gameMode === 'offense');
         document.getElementById('gm-def').classList.toggle('active', scoreState.gameMode === 'defense');
-        
+
         document.getElementById('offense-controls').style.display = scoreState.gameMode === 'offense' ? 'block' : 'none';
         document.getElementById('defense-controls').style.display = scoreState.gameMode === 'defense' ? 'block' : 'none';
         document.getElementById('batter-nav-group').style.display = scoreState.gameMode === 'offense' ? 'flex' : 'none';
-        
+
         const curL = lineupState[scoreState.currentClass];
         const curB = curL.list[curL.activeIdx];
         document.getElementById('live-batter-name').innerText = scoreState.gameMode === 'offense' ? `${curL.activeIdx+1}.${curB.name}(${curB.pos})` : `P.${curL.pName} (${curL.pCount}구)`;
@@ -313,14 +335,14 @@
 
     function changeGameClass(cls) { scoreState.currentClass = cls; updateScoreState(); sendLineupData(); }
     function setGameMode(m) { scoreState.gameMode = m; updateScoreState(); sendLineupData(); }
-    
-    function nextBatter() { 
+
+    function nextBatter() {
         if(scoreState.gameMode === 'offense') {
-            lineupState[scoreState.currentClass].activeIdx = (lineupState[scoreState.currentClass].activeIdx + 1) % 9; 
+            lineupState[scoreState.currentClass].activeIdx = (lineupState[scoreState.currentClass].activeIdx + 1) % 9;
         }
-        saveLineup(); sendLineupData(); updateScoreUI(); 
+        saveLineup(); sendLineupData(); updateScoreUI();
     }
-    
+
     // 💡 이전 타자 기능 추가
     function prevBatter() {
         if(scoreState.gameMode === 'offense') {
@@ -334,8 +356,8 @@
             const b = lineupState[scoreState.currentClass].list[lineupState[scoreState.currentClass].activeIdx];
             if(b.results.length < 5) b.results.push(r);
             resetBS(); // 출루/타격 시 카운트 초기화
-        } else { 
-            lineupState[scoreState.currentClass].pCount++; 
+        } else {
+            lineupState[scoreState.currentClass].pCount++;
         }
         saveLineup(); sendLineupData(); updateScoreUI();
     }
@@ -408,7 +430,42 @@
     }
 
     function syncAll() { updateScoreState(); sendLineupData(); }
-    setMainTab('score');
+
+    // ── 🔒 접속 암호 게이트 + 컨트롤러 시작 ─────────────────────────────────────────
+    function todayCode() {
+        const d = new Date();
+        return String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+    }
+
+    function startController() {
+        peer = new Peer();
+        peer.on('open', initConn);
+        // 끊김 감지 재접속(2초 주기) — viewer reload 후 빠르게 복구.
+        setInterval(() => { if(!conn || !conn.open) initConn(); }, 2000);
+        // 상태 하트비트(5초) — 패킷 누락/재접속 직후에도 최신 상태가 곧 반영되도록 안전망.
+        setInterval(() => { if(conn && conn.open) { conn.send(scoreState); sendLineupData(); } }, 5000);
+        setMainTab('score');
+    }
+
+    function submitGate() {
+        const v = (document.getElementById('gate-input').value || '').trim();
+        if (v === todayCode()) {
+            sessionStorage.setItem('ctrl_auth', todayCode());
+            document.getElementById('gate').style.display = 'none';
+            startController();
+        } else {
+            document.getElementById('gate-err').style.display = 'block';
+            document.getElementById('gate-input').value = '';
+        }
+    }
+
+    // 같은 탭에서 이미 인증했으면(새로고침 등) 다시 묻지 않음. 새 방문자/새 탭은 매번 입력.
+    if (sessionStorage.getItem('ctrl_auth') === todayCode()) {
+        document.getElementById('gate').style.display = 'none';
+        startController();
+    } else {
+        setTimeout(() => document.getElementById('gate-input').focus(), 100);
+    }
 </script>
 </body>
 </html>
