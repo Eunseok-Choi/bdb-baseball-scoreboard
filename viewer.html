@@ -58,72 +58,124 @@
 
 <script>
     const MY_ID = 'jiho-papa-live-viewer';
+    const LS_KEY = 'bdb_scoreboard_state';   // 방송앱 30분 리로드에도 점수 유지용
     let peer = null;
 
-    function applyData(data) {
-        if (data.html !== undefined) { document.getElementById('lineup-text').innerHTML = data.html; }
-        else if (data.text !== undefined) { document.getElementById('lineup-text').innerText = data.text; }
-        else {
-            if(data.nameA !== undefined) document.getElementById('name-a').innerText = data.nameA;
-            if(data.nameB !== undefined) document.getElementById('name-b').innerText = data.nameB;
-            if(data.scoreA !== undefined) document.getElementById('score-a').innerText = data.scoreA;
-            if(data.scoreB !== undefined) document.getElementById('score-b').innerText = data.scoreB;
-            if(data.inning !== undefined) document.getElementById('inning-num').innerText = data.inning;
-            if(data.isTop !== undefined) document.getElementById('inning-tri').className = data.isTop ? 'triangle up' : 'triangle down';
-            if(data.base1 !== undefined) document.getElementById('base1').classList.toggle('on', data.base1);
-            if(data.base2 !== undefined) document.getElementById('base2').classList.toggle('on', data.base2);
-            if(data.base3 !== undefined) document.getElementById('base3').classList.toggle('on', data.base3);
-            if(data.b !== undefined) for(let i=1; i<=3; i++) document.getElementById('b'+i)?.classList.toggle('on', data.b >= i);
-            if(data.s !== undefined) for(let i=1; i<=2; i++) document.getElementById('s'+i)?.classList.toggle('on', data.s >= i);
-            if(data.o !== undefined) for(let i=1; i<=2; i++) document.getElementById('o'+i)?.classList.toggle('on', data.o >= i);
-        }
+    // ── 로컬 상태 (앱 리모컨 제어 + 컨트롤러 수신 공통 소스) ──────────────
+    const defaultState = {
+        nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0,
+        inning: 1, isTop: true,
+        base1: false, base2: false, base3: false,
+        b: 0, s: 0, o: 0, lineupHtml: '준비 중...'
+    };
+    function loadState() {
+        try { const j = localStorage.getItem(LS_KEY); if (j) return Object.assign({}, defaultState, JSON.parse(j)); }
+        catch (e) {}
+        return Object.assign({}, defaultState);
+    }
+    function saveState() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {} }
+    let state = loadState();
+
+    function render() {
+        document.getElementById('name-a').innerText = state.nameA;
+        document.getElementById('name-b').innerText = state.nameB;
+        document.getElementById('score-a').innerText = state.scoreA;
+        document.getElementById('score-b').innerText = state.scoreB;
+        document.getElementById('inning-num').innerText = state.inning;
+        document.getElementById('inning-tri').className = state.isTop ? 'triangle up' : 'triangle down';
+        document.getElementById('base1').classList.toggle('on', !!state.base1);
+        document.getElementById('base2').classList.toggle('on', !!state.base2);
+        document.getElementById('base3').classList.toggle('on', !!state.base3);
+        for (let i = 1; i <= 3; i++) document.getElementById('b' + i)?.classList.toggle('on', state.b >= i);
+        for (let i = 1; i <= 2; i++) document.getElementById('s' + i)?.classList.toggle('on', state.s >= i);
+        for (let i = 1; i <= 2; i++) document.getElementById('o' + i)?.classList.toggle('on', state.o >= i);
+        document.getElementById('lineup-text').innerHTML = state.lineupHtml;
     }
 
-    // 🛡️ 뷰어 연결 및 자동 복구 시스템
+    function escapeHtml(t) {
+        return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // 컨트롤러(PeerJS)에서 받은 델타를 state에 병합 후 렌더 → 컨트롤러/앱 제어가 같은 상태를 공유.
+    function applyData(data) {
+        if (data.html !== undefined) state.lineupHtml = data.html;
+        else if (data.text !== undefined) state.lineupHtml = escapeHtml(data.text);
+        if (data.nameA !== undefined) state.nameA = data.nameA;
+        if (data.nameB !== undefined) state.nameB = data.nameB;
+        if (data.scoreA !== undefined) state.scoreA = data.scoreA;
+        if (data.scoreB !== undefined) state.scoreB = data.scoreB;
+        if (data.inning !== undefined) state.inning = data.inning;
+        if (data.isTop !== undefined) state.isTop = data.isTop;
+        if (data.base1 !== undefined) state.base1 = data.base1;
+        if (data.base2 !== undefined) state.base2 = data.base2;
+        if (data.base3 !== undefined) state.base3 = data.base3;
+        if (data.b !== undefined) state.b = data.b;
+        if (data.s !== undefined) state.s = data.s;
+        if (data.o !== undefined) state.o = data.o;
+        saveState();
+        render();
+    }
+
+    // ── 방송앱 리모컨 제어 API (앱이 evaluateJavascript로 호출) ──────────────
+    // 카운트는 표시 점수 수만큼 순환(다시 누르면 0으로 리셋). 야구 자동 진행 로직은 넣지 않음(수동 제어).
+    function bdbToggleBase(n) { state['base' + n] = !state['base' + n]; saveState(); render(); }
+    function bdbBall()   { state.b = (state.b + 1) % 4; saveState(); render(); }   // 0→1→2→3→0
+    function bdbStrike() { state.s = (state.s + 1) % 3; saveState(); render(); }   // 0→1→2→0
+    function bdbOut()    { state.o = (state.o + 1) % 3; saveState(); render(); }   // 0→1→2→0
+    function bdbSwapTeams() {   // 팀 이름 + 점수 함께 교체(각 팀이 자기 점수 유지)
+        const n = state.nameA; state.nameA = state.nameB; state.nameB = n;
+        const sc = state.scoreA; state.scoreA = state.scoreB; state.scoreB = sc;
+        saveState(); render();
+    }
+    function bdbScore(team, delta) {
+        if (team === 'a') state.scoreA = Math.max(0, state.scoreA + delta);
+        else state.scoreB = Math.max(0, state.scoreB + delta);
+        saveState(); render();
+    }
+    // 기록 초기화 — 점수/카운트/베이스/이닝을 기본값으로(이름은 유지할지 여부 선택). 새 경기 시작용.
+    function bdbReset(keepNames) {
+        const a = state.nameA, b = state.nameB;
+        state = Object.assign({}, defaultState);
+        if (keepNames) { state.nameA = a; state.nameB = b; }
+        saveState(); render();
+    }
+    // 팀 이름 설정(빈 값/undefined는 변경 안 함).
+    function bdbSetNames(a, b) {
+        if (a !== undefined && a !== null && a !== '') state.nameA = a;
+        if (b !== undefined && b !== null && b !== '') state.nameB = b;
+        saveState(); render();
+    }
+    // window 전역으로 노출(evaluateJavascript에서 호출 가능하도록 명시)
+    window.bdbToggleBase = bdbToggleBase; window.bdbBall = bdbBall;
+    window.bdbStrike = bdbStrike; window.bdbOut = bdbOut;
+    window.bdbSwapTeams = bdbSwapTeams; window.bdbScore = bdbScore;
+    window.bdbReset = bdbReset; window.bdbSetNames = bdbSetNames;
+
+    // 최초 1회 저장된(또는 기본) 상태 렌더
+    render();
+
+    // 🛡️ 뷰어 연결 및 자동 복구 시스템 (컨트롤러를 별도로 쓸 때 여전히 동작)
     function initViewerPeer() {
-        if (peer && !peer.destroyed) {
-            peer.destroy();
-        }
-
+        if (peer && !peer.destroyed) { peer.destroy(); }
         peer = new Peer(MY_ID);
-
-        peer.on('open', (id) => {
-            console.log('✅ 뷰어 방 생성 완료:', id);
-        });
-
+        peer.on('open', (id) => { console.log('✅ 뷰어 방 생성 완료:', id); });
         peer.on('connection', (conn) => {
-            // 🔄 컨트롤러가 (재)접속하는 즉시 "현재 상태 전체를 보내달라"고 요청.
-            //    → 방송앱이 30분마다 이 페이지를 reload해도, 재접속 직후 최신 점수가 바로 복구됨.
             conn.on('open', () => { try { conn.send({ req: 'sync' }); } catch (e) {} });
             conn.on('data', (data) => {
-                if (data && data.req !== undefined) return;   // 제어용 메시지(요청)는 무시
+                if (data && data.req !== undefined) return;   // 제어용 요청 메시지는 무시
                 applyData(data);
             });
         });
-
-        peer.on('disconnected', () => {
-            console.warn('⚠️ 서버와 끊어짐. 재연결 시도...');
-            peer.reconnect();
-        });
-
-        peer.on('error', (err) => {
-            console.error('❌ 에러 발생, 3초 후 강제 초기화:', err);
-            setTimeout(initViewerPeer, 3000);
-        });
+        peer.on('disconnected', () => { peer.reconnect(); });
+        peer.on('error', (err) => { console.error('❌ Peer 에러, 3초 후 재초기화:', err); setTimeout(initViewerPeer, 3000); });
     }
-
-    // 최초 실행
     initViewerPeer();
 
-    // 🕵️ 좀비 와치독 (5초마다 생존 확인, 죽었으면 예비 동작)
+    // 🕵️ 좀비 와치독 (5초마다 생존 확인)
     setInterval(() => {
         if (!peer || peer.disconnected || peer.destroyed) {
-            console.log('🕵️ 뷰어 연결 이상 감지. 긴급 심폐소생술 실행!');
-            if(peer && peer.disconnected && !peer.destroyed) {
-                peer.reconnect();
-            } else {
-                initViewerPeer();
-            }
+            if (peer && peer.disconnected && !peer.destroyed) peer.reconnect();
+            else initViewerPeer();
         }
     }, 5000);
 </script>
