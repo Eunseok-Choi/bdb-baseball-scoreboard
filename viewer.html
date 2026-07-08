@@ -149,12 +149,16 @@
     function bdbInning(delta) { state.inning = Math.max(1, (state.inning | 0) + delta); saveState(); render(); }
     // 초/말 전환(삼각형 ▲/▼).
     function bdbToggleTop() { state.isTop = !state.isTop; saveState(); render(); }
+    // 라인업 바 텍스트 설정(앱 리모컨 모드에서 '라인업 미지원.' 등 표시용).
+    function bdbSetLineup(t) { state.lineupHtml = escapeHtml(t); saveState(); render(); }
     // window 전역으로 노출(evaluateJavascript에서 호출 가능하도록 명시)
     window.bdbToggleBase = bdbToggleBase; window.bdbBall = bdbBall;
     window.bdbStrike = bdbStrike; window.bdbOut = bdbOut;
     window.bdbSwapTeams = bdbSwapTeams; window.bdbScore = bdbScore;
     window.bdbReset = bdbReset; window.bdbSetNames = bdbSetNames;
     window.bdbInning = bdbInning; window.bdbToggleTop = bdbToggleTop;
+    window.bdbSetLineup = bdbSetLineup;
+    window.applyData = applyData;   // 앱 내장 컨트롤러(controller_single.html) 브릿지가 전체 상태를 전달할 때 사용
 
     // 최초 1회 저장된(또는 기본) 상태 렌더
     render();
