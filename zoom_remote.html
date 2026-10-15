@@ -97,21 +97,56 @@ function render() {
 
 function send(msg) { try { if (conn && conn.open) conn.send(msg); } catch (e) {} }
 
-function connect() {
-    if (peer && !peer.destroyed) { try { peer.destroy(); } catch (e) {} }
-    setConn(false);
-    peer = new Peer();
-    peer.on('open', () => {
-        conn = peer.connect(TARGET_ID, { reliable: true });
-        conn.on('open', () => { setConn(true); send({ type: 'status' }); });
-        conn.on('data', d => {
-            if (d && d.type === 'status') { status = { zoom: +d.zoom, max: +d.max, canZoom: !!d.canZoom }; render(); }
-        });
-        conn.on('close', () => { setConn(false); setTimeout(connect, 2000); });
-        conn.on('error', () => { setConn(false); setTimeout(connect, 2000); });
+// ── 연결 관리: 시그널링 피어(peer)는 최대한 유지하고, 폰으로의 데이터 연결(conn)만 빠르게 재시도 ──
+let lastRx = 0;          // 폰에서 마지막으로 받은 시각(하트비트 응답 포함)
+let lastAttempt = 0;     // 마지막 conn 시도 시각
+let retryTimer = null;
+
+function scheduleOpen(ms) {
+    if (retryTimer) return;
+    retryTimer = setTimeout(() => { retryTimer = null; openConn(); }, ms);
+}
+
+function openConn() {
+    if (!peer || peer.destroyed || !peer.open) return;
+    lastAttempt = Date.now();
+    try { if (conn) { const old = conn; conn = null; old.close(); } } catch (e) {}
+    const c = peer.connect(TARGET_ID, { reliable: true });
+    conn = c;
+    c.on('open', () => { lastRx = Date.now(); setConn(true); send({ type: 'status' }); });
+    c.on('data', d => {
+        lastRx = Date.now();
+        if (d && d.type === 'status') { status = { zoom: +d.zoom, max: +d.max, canZoom: !!d.canZoom }; render(); }
     });
-    peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
-    peer.on('error', () => { setConn(false); setTimeout(connect, 3000); });
+    const lost = () => { if (conn === c) { setConn(false); scheduleOpen(800); } };
+    c.on('close', lost);
+    c.on('error', lost);
+}
+
+function connect() {   // 피어 새로 생성(최초/치명적 오류 시)
+    try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+    setConn(false);
+    const p = new Peer();
+    peer = p;
+    p.on('open', () => openConn());
+    p.on('disconnected', () => { try { if (!p.destroyed) p.reconnect(); } catch (e) {} });
+    p.on('error', err => {
+        setConn(false);
+        if (err && err.type === 'peer-unavailable') scheduleOpen(1000);   // 폰이 아직 ID 등록 전 → 피어 유지, 1초 뒤 재시도
+        else setTimeout(connect, 2000);                                   // 그 외 오류 → 피어 재생성
+    });
+}
+
+// 하트비트(2초): 연결되어 있으면 ping, 6초간 응답 없으면 죽은 연결로 보고 즉시 재연결. 끊겼으면 빠르게 재시도.
+function heartbeat() {
+    if (!peer || peer.destroyed) { connect(); return; }
+    if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} return; }
+    if (conn && conn.open) {
+        send({ type: 'ping' });
+        if (Date.now() - lastRx > 6000) { setConn(false); openConn(); }
+    } else if (peer.open && Date.now() - lastAttempt > 2500) {
+        openConn();
+    }
 }
 
 // 누르고 있는 동안 STEP씩 반복
@@ -139,8 +174,11 @@ document.getElementById('btnAdd').addEventListener('click', () => {
 });
 document.getElementById('btnReset').addEventListener('click', () => { presets = DEFAULT_PRESETS.slice(); savePresets(); render(); });
 
-// 연결 상태 점검
-setInterval(() => { if (!conn || !conn.open) { if (!peer || peer.destroyed || peer.disconnected) connect(); } }, 5000);
+setInterval(heartbeat, 2000);
+// 화면 복귀/네트워크 복구 시 즉시 점검
+document.addEventListener('visibilitychange', () => { if (!document.hidden) heartbeat(); });
+window.addEventListener('online', heartbeat);
+window.addEventListener('focus', heartbeat);
 
 render();
 connect();
