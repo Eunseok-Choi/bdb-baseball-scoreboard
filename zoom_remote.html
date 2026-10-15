@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>줌 리모컨</title>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  body { margin: 0; background: #121212; color: #fff; font-family: -apple-system, 'Noto Sans KR', sans-serif; padding: 16px; max-width: 480px; margin: 0 auto; }
+  .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  #conn { font-size: 13px; padding: 4px 10px; border-radius: 12px; background: #444; }
+  #conn.ok { background: #1b8f3c; }
+  #zoomVal { font-size: 64px; font-weight: 700; text-align: center; margin: 8px 0 2px; }
+  #maxInfo { text-align: center; color: #aaa; font-size: 13px; margin-bottom: 18px; }
+  .holdRow { display: flex; gap: 12px; margin-bottom: 18px; }
+  .hold { flex: 1; height: 96px; font-size: 40px; font-weight: 700; border: none; border-radius: 16px; background: #2a2a2a; color: #fff; }
+  .hold:active, .hold.on { background: #0a84ff; }
+  #presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .preset { height: 56px; font-size: 18px; border: none; border-radius: 12px; background: #2a2a2a; color: #fff; position: relative; }
+  .preset:active { background: #0a84ff; }
+  .preset .x { position: absolute; top: 2px; right: 6px; font-size: 14px; color: #ff6b6b; display: none; }
+  body.edit .preset .x { display: block; }
+  #editBar { margin-top: 14px; display: none; gap: 8px; }
+  body.edit #editBar { display: flex; }
+  #newPreset { flex: 1; height: 44px; font-size: 18px; border-radius: 10px; border: 1px solid #555; background: #1e1e1e; color: #fff; padding: 0 10px; }
+  .small { height: 44px; padding: 0 16px; border: none; border-radius: 10px; background: #2a2a2a; color: #fff; font-size: 15px; }
+  #msg { margin-top: 14px; text-align: center; color: #ffb74d; font-size: 13px; min-height: 18px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <strong>줌 리모컨</strong>
+    <span id="conn">연결 중…</span>
+  </div>
+
+  <div id="zoomVal">--</div>
+  <div id="maxInfo">최대 --x</div>
+
+  <div class="holdRow">
+    <button class="hold" id="btnOut">−</button>
+    <button class="hold" id="btnIn">+</button>
+  </div>
+
+  <div class="row"><strong style="font-size:14px">프리셋</strong><button class="small" id="btnEdit">편집</button></div>
+  <div id="presets"></div>
+  <div id="editBar">
+    <input id="newPreset" type="number" inputmode="decimal" step="0.1" min="1" placeholder="배율 (예: 4)">
+    <button class="small" id="btnAdd">추가</button>
+    <button class="small" id="btnReset">기본값</button>
+  </div>
+  <div id="msg"></div>
+
+<script>
+const TARGET_ID = 'jjremote';           // 폰 앱(zoom_receiver.html)의 고정 PeerJS ID
+const STEP = 0.1;                       // 누르고 있는 동안 한 번에 변하는 배율
+const REPEAT_MS = 120;                  // 반복 전송 간격
+const DEFAULT_PRESETS = [1, 2, 3, 5, 8, 10];   // ← 프리셋 기본값(웹에서 정의, 앱 설정보다 우선)
+const LS_KEY = 'zoom_presets_v1';
+
+let peer = null, conn = null;
+let status = { zoom: 1, max: 20, canZoom: true };
+let presets = loadPresets();
+
+function loadPresets() {
+    try { const a = JSON.parse(localStorage.getItem(LS_KEY)); if (Array.isArray(a) && a.length) return a; } catch (e) {}
+    return DEFAULT_PRESETS.slice();
+}
+function savePresets() { try { localStorage.setItem(LS_KEY, JSON.stringify(presets)); } catch (e) {} }
+
+function setConn(ok) {
+    const el = document.getElementById('conn');
+    el.textContent = ok ? '연결됨' : '연결 중…';
+    el.className = ok ? 'ok' : '';
+}
+function say(t) { document.getElementById('msg').textContent = t || ''; }
+
+function render() {
+    document.getElementById('zoomVal').textContent = status.zoom.toFixed(1) + 'x';
+    document.getElementById('maxInfo').textContent = '최대 ' + status.max.toFixed(1) + 'x';
+    say(status.canZoom ? '' : '현재 카메라 소스에서는 줌을 사용할 수 없습니다.');
+    const box = document.getElementById('presets');
+    box.innerHTML = '';
+    presets.slice().sort((a, b) => a - b).forEach(p => {
+        const b = document.createElement('button');
+        b.className = 'preset';
+        b.textContent = p + 'x';
+        const x = document.createElement('span'); x.className = 'x'; x.textContent = '✕';
+        b.appendChild(x);
+        b.addEventListener('click', () => {
+            if (document.body.classList.contains('edit')) { presets = presets.filter(v => v !== p); savePresets(); render(); }
+            else send({ type: 'zoomTo', value: p });
+        });
+        box.appendChild(b);
+    });
+}
+
+function send(msg) { try { if (conn && conn.open) conn.send(msg); } catch (e) {} }
+
+function connect() {
+    if (peer && !peer.destroyed) { try { peer.destroy(); } catch (e) {} }
+    setConn(false);
+    peer = new Peer();
+    peer.on('open', () => {
+        conn = peer.connect(TARGET_ID, { reliable: true });
+        conn.on('open', () => { setConn(true); send({ type: 'status' }); });
+        conn.on('data', d => {
+            if (d && d.type === 'status') { status = { zoom: +d.zoom, max: +d.max, canZoom: !!d.canZoom }; render(); }
+        });
+        conn.on('close', () => { setConn(false); setTimeout(connect, 2000); });
+        conn.on('error', () => { setConn(false); setTimeout(connect, 2000); });
+    });
+    peer.on('disconnected', () => { try { peer.reconnect(); } catch (e) {} });
+    peer.on('error', () => { setConn(false); setTimeout(connect, 3000); });
+}
+
+// 누르고 있는 동안 STEP씩 반복
+function bindHold(id, dir) {
+    const el = document.getElementById(id);
+    let timer = null;
+    const tick = () => send({ type: 'zoomBy', delta: dir * STEP });
+    const start = e => { e.preventDefault(); if (timer) return; el.classList.add('on'); tick(); timer = setInterval(tick, REPEAT_MS); };
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } el.classList.remove('on'); };
+    el.addEventListener('pointerdown', start);
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => el.addEventListener(ev, stop));
+    window.addEventListener('blur', stop);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+}
+bindHold('btnIn', +1);
+bindHold('btnOut', -1);
+
+document.getElementById('btnEdit').addEventListener('click', () => document.body.classList.toggle('edit'));
+document.getElementById('btnAdd').addEventListener('click', () => {
+    const v = parseFloat(document.getElementById('newPreset').value);
+    if (!isFinite(v) || v < 1) return;
+    const r = Math.round(v * 10) / 10;
+    if (!presets.includes(r)) { presets.push(r); savePresets(); render(); }
+    document.getElementById('newPreset').value = '';
+});
+document.getElementById('btnReset').addEventListener('click', () => { presets = DEFAULT_PRESETS.slice(); savePresets(); render(); });
+
+// 연결 상태 점검
+setInterval(() => { if (!conn || !conn.open) { if (!peer || peer.destroyed || peer.disconnected) connect(); } }, 5000);
+
+render();
+connect();
+</script>
+</body>
+</html>
