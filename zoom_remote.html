@@ -26,6 +26,7 @@
   #newPreset { flex: 1; height: 44px; font-size: 18px; border-radius: 10px; border: 1px solid #555; background: #1e1e1e; color: #fff; padding: 0 10px; }
   .small { height: 44px; padding: 0 16px; border: none; border-radius: 10px; background: #2a2a2a; color: #fff; font-size: 15px; }
   #msg { margin-top: 14px; text-align: center; color: #ffb74d; font-size: 13px; min-height: 18px; }
+  #diag { margin-top: 6px; text-align: center; color: #8e8e93; font-size: 12px; min-height: 16px; }
 </style>
 </head>
 <body>
@@ -50,6 +51,7 @@
     <button class="small" id="btnReset">기본값</button>
   </div>
   <div id="msg"></div>
+  <div id="diag"></div>
 
 <script>
 const TARGET_ID = 'jjremote';           // 폰 앱(zoom_receiver.html)의 고정 PeerJS ID
@@ -74,6 +76,8 @@ function setConn(ok) {
     el.className = ok ? 'ok' : '';
 }
 function say(t) { document.getElementById('msg').textContent = t || ''; }
+// 연결 진단 문구(안 붙을 때 어느 쪽 문제인지 보이게)
+function setDiag(t) { document.getElementById('diag').textContent = t || ''; }
 
 function render() {
     document.getElementById('zoomVal').textContent = status.zoom.toFixed(1) + 'x';
@@ -107,45 +111,90 @@ function scheduleOpen(ms) {
     retryTimer = setTimeout(() => { retryTimer = null; openConn(); }, ms);
 }
 
-function openConn() {
+const PENDING_MS = 15000;   // 협상 중(아직 안 열린) 연결은 이 시간 동안 끊지 않고 기다림
+let retryPeer = null;
+let iceDiscSince = 0;
+
+// WebRTC 상태로 '열려 있지만 사실상 죽은' 연결 감지(백그라운드 복귀 직후 등)
+function iceDead(c) {
+    try {
+        const pc = c && c.peerConnection;
+        if (!pc) return false;
+        const s = pc.iceConnectionState;
+        if (s === 'failed' || s === 'closed') return true;
+        if (s === 'disconnected') {
+            if (!iceDiscSince) iceDiscSince = Date.now();
+            return Date.now() - iceDiscSince > 5000;
+        }
+        iceDiscSince = 0;
+    } catch (e) {}
+    return false;
+}
+
+function openConn(force) {
     if (!peer || peer.destroyed || !peer.open) return;
+    // 협상 중인 연결을 너무 일찍 끊고 새로 시작하면(느린 ICE/TURN) 영영 못 붙을 수 있어 일정 시간 기다림
+    if (!force && conn && !conn.open && Date.now() - lastAttempt < PENDING_MS) return;
     lastAttempt = Date.now();
     try { if (conn) { const old = conn; conn = null; old.close(); } } catch (e) {}
+    iceDiscSince = 0;
     const c = peer.connect(TARGET_ID, { reliable: true });
     conn = c;
-    c.on('open', () => { lastRx = Date.now(); setConn(true); send({ type: 'status' }); });
+    c.on('open', () => { lastRx = Date.now(); setConn(true); setDiag(''); send({ type: 'status' }); });
     c.on('data', d => {
         lastRx = Date.now();
         if (d && d.type === 'status') { status = { zoom: +d.zoom, max: +d.max, canZoom: !!d.canZoom }; render(); }
     });
-    const lost = () => { if (conn === c) { setConn(false); scheduleOpen(800); } };
+    // 끝난 연결은 비워서(conn=null) 다음 시도가 '대기 중' 가드에 막히지 않게 함
+    const lost = () => { if (conn === c) { conn = null; setConn(false); setDiag('연결이 끊겼어요 — 다시 연결 중…'); scheduleOpen(800); } };
     c.on('close', lost);
     c.on('error', lost);
 }
 
 function connect() {   // 피어 새로 생성(최초/치명적 오류 시)
     try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+    conn = null;
     setConn(false);
+    setDiag('시그널링 서버에 연결 중…');
     const p = new Peer();
     peer = p;
-    p.on('open', () => openConn());
-    p.on('disconnected', () => { try { if (!p.destroyed) p.reconnect(); } catch (e) {} });
+    p.on('open', () => { if (p === peer) { setDiag('폰(앱)에 연결 중…'); openConn(true); } });
+    p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
     p.on('error', err => {
+        if (p !== peer) return;   // 교체된 이전 피어의 에러는 무시(정상 피어를 다시 끊는 연쇄 방지)
         setConn(false);
-        if (err && err.type === 'peer-unavailable') scheduleOpen(1000);   // 폰이 아직 ID 등록 전 → 피어 유지, 1초 뒤 재시도
-        else setTimeout(connect, 2000);                                   // 그 외 오류 → 피어 재생성
+        if (err && err.type === 'peer-unavailable') {   // 폰이 아직 ID 등록 전 → 피어 유지, 1초 뒤 재시도
+            conn = null;
+            setDiag('폰(앱)이 서버에 없어요 — 방송 중인지, 앱의 "원격 줌 허용"이 켜져 있는지 확인하세요 (자동 재시도 중)');
+            scheduleOpen(1000);
+        } else if (!retryPeer) {                        // 그 외 오류 → 피어 재생성(중복 예약 방지)
+            setDiag('서버 연결 오류(' + ((err && err.type) || '알 수 없음') + ') — 다시 시도 중…');
+            retryPeer = setTimeout(() => { retryPeer = null; if (p === peer) connect(); }, 2000);
+        }
     });
 }
 
-// 하트비트(2초): 연결되어 있으면 ping, 6초간 응답 없으면 죽은 연결로 보고 즉시 재연결. 끊겼으면 빠르게 재시도.
+// 하트비트(2초): 연결되어 있으면 ping, 6초간 응답 없거나 WebRTC가 죽었으면 즉시 재연결. 끊겼으면 재시도(협상 중이면 대기).
 function heartbeat() {
+    if (retryPeer) return;   // 피어 재생성 예약 중
     if (!peer || peer.destroyed) { connect(); return; }
     if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} return; }
     if (conn && conn.open) {
         send({ type: 'ping' });
-        if (Date.now() - lastRx > 6000) { setConn(false); openConn(); }
-    } else if (peer.open && Date.now() - lastAttempt > 2500) {
-        openConn();
+        if (Date.now() - lastRx > 6000 || iceDead(conn)) { setConn(false); openConn(true); }
+    } else if (peer.open) {
+        if (conn && !conn.open) setDiag('폰(앱)에 연결 중… ' + Math.round((Date.now() - lastAttempt) / 1000) + '초');
+        openConn(false);
+    }
+}
+
+// 화면/앱 복귀(백그라운드 후): 즉시 점검 + 열린 연결은 2.5초 안에 응답 없으면 죽은 것으로 보고 재연결
+function onResume() {
+    heartbeat();
+    if (conn && conn.open) {
+        const t0 = Date.now();
+        send({ type: 'ping' });
+        setTimeout(() => { if (conn && conn.open && lastRx < t0) { setConn(false); openConn(true); } }, 2500);
     }
 }
 
@@ -176,9 +225,10 @@ document.getElementById('btnReset').addEventListener('click', () => { presets = 
 
 setInterval(heartbeat, 2000);
 // 화면 복귀/네트워크 복구 시 즉시 점검
-document.addEventListener('visibilitychange', () => { if (!document.hidden) heartbeat(); });
-window.addEventListener('online', heartbeat);
-window.addEventListener('focus', heartbeat);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) onResume(); });
+window.addEventListener('online', onResume);
+window.addEventListener('focus', onResume);
+window.addEventListener('pageshow', onResume);   // 뒤로가기 캐시(bfcache) 복원 대비
 
 render();
 connect();
