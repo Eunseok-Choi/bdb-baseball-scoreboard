@@ -164,28 +164,55 @@
     render();
 
     // 🛡️ 뷰어 연결 및 자동 복구 시스템 (컨트롤러를 별도로 쓸 때 여전히 동작)
+    let conns = [];            // 연결된 컨트롤러들(페이지 종료 시 정리용)
+    let reinitTimer = null;    // 재초기화 중복 예약 방지
+    function scheduleInit(ms) {
+        if (reinitTimer) return;
+        reinitTimer = setTimeout(() => { reinitTimer = null; initViewerPeer(); }, ms);
+    }
+
     function initViewerPeer() {
-        if (peer && !peer.destroyed) { peer.destroy(); }
-        peer = new Peer(MY_ID);
-        peer.on('open', (id) => { console.log('✅ 뷰어 방 생성 완료:', id); });
-        peer.on('connection', (conn) => {
+        try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+        conns = [];
+        const p = new Peer(MY_ID);
+        peer = p;
+        p.on('open', (id) => { console.log('✅ 뷰어 방 생성 완료:', id); });
+        p.on('connection', (conn) => {
+            conns.push(conn);
             conn.on('open', () => { try { conn.send({ req: 'sync' }); } catch (e) {} });
             conn.on('data', (data) => {
-                if (data && data.req !== undefined) return;   // 제어용 요청 메시지는 무시
+                // 컨트롤러 생존 확인(ping) → 즉시 pong. 컨트롤러가 '열려 있지만 죽은 연결'을 빨리 감지하는 데 사용.
+                if (data && data.req === 'ping') { try { conn.send({ req: 'pong' }); } catch (e) {} return; }
+                if (data && data.req !== undefined) return;   // 그 외 제어용 요청 메시지는 무시
                 applyData(data);
             });
+            const drop = () => { conns = conns.filter(x => x !== conn); };
+            conn.on('close', drop);
+            conn.on('error', drop);
         });
-        peer.on('disconnected', () => { peer.reconnect(); });
-        peer.on('error', (err) => { console.error('❌ Peer 에러, 3초 후 재초기화:', err); setTimeout(initViewerPeer, 3000); });
+        p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
+        // 교체된 이전 피어의 에러는 무시(정상 피어를 다시 끊는 연쇄 방지). ID 선점 등은 짧게 재시도.
+        p.on('error', (err) => {
+            if (p !== peer) return;
+            console.error('❌ Peer 에러, 3초 후 재초기화:', err);
+            scheduleInit(3000);
+        });
     }
     initViewerPeer();
 
+    // 페이지 이탈/리로드(앱의 30분 주기 새로고침 포함) 때 연결과 ID를 즉시 정리 →
+    // 컨트롤러가 'close'를 바로 받아 재접속하고, 서버가 ID를 빨리 해제해 새 페이지가 곧바로 등록됨.
+    function cleanupPeer() {
+        try { conns.forEach(c => { try { c.close(); } catch (e) {} }); } catch (e) {}
+        try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+    }
+    window.addEventListener('pagehide', cleanupPeer);
+    window.addEventListener('beforeunload', cleanupPeer);
+
     // 🕵️ 좀비 와치독 (5초마다 생존 확인)
     setInterval(() => {
-        if (!peer || peer.disconnected || peer.destroyed) {
-            if (peer && peer.disconnected && !peer.destroyed) peer.reconnect();
-            else initViewerPeer();
-        }
+        if (!peer || peer.destroyed) scheduleInit(0);
+        else if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} }
     }, 5000);
 </script>
 </body>
