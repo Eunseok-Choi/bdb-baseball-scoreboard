@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>가로형 스코어 보드 뷰어 (하단 바)</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        /* 모든 크기는 --u(= 바 높이/100)의 배수로 정의 → 오버레이 박스를 어떤 크기로 잡아도 비율 유지.
+           오버레이 박스는 풀 화면(16:9 캔버스 전체)으로 두면 바가 하단에 1:1로 표시됨. */
+        :root { --u: 1vh; }
+        html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+        body { font-family: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Segoe UI', sans-serif; font-weight: 900; }
+        /* 앱의 웹 오버레이는 16:9 캔버스 전체를 뷰포트로 렌더 → 바는 '캔버스 하단'에 가로폭 기준(vw)으로 배치.
+           (바 높이 = 폭의 8.68% → 16:9에서 화면 높이의 약 15%). 좌우/하단 안전 여백 포함 → 가이드라인 안쪽.
+           오버레이 박스는 풀(0,0,100%,100%)로 두면 1:1로 보임. */
+        .bar { position: fixed; left: 1.2vw; right: 1.2vw; bottom: 2vh; height: calc((100vw - 2.4vw) * 0.0868); display: flex; align-items: flex-end; }
+
+        /* ── 좌측: 위(타자/투수 라인업) + 아래(대회명) ── */
+        .left { flex: 0 0 21.8%; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+        .lineup, .title { height: 50%; background: #fff; color: #111; display: flex; align-items: center; box-sizing: border-box; padding: 0 calc(var(--u) * 5); overflow: hidden; }
+        .lineup { border-radius: calc(var(--u) * 6) calc(var(--u) * 6) 0 0; font-size: calc(var(--u) * 24); border-bottom: 1px solid #e3e3e3; }
+        .title  { font-size: calc(var(--u) * 21); justify-content: center; white-space: nowrap; text-overflow: ellipsis; }
+        #lineup-text { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #lineup-text span { white-space: nowrap; }
+
+        /* ── 우측: 팀A / 팀B / 이닝·베이스·카운트 (아래 한 줄) ── */
+        .right { flex: 1; height: 50%; display: flex; align-items: stretch; }
+        .team { flex: 0 0 28.5%; display: flex; align-items: center; box-sizing: border-box; padding: 0 calc(var(--u) * 4); gap: calc(var(--u) * 4); min-width: 0; }
+        .team.a { background: #00B7EB; color: #0a2a44; border-radius: 0; }
+        .team.b { background: #FFE600; color: #222; }
+        .team .name { flex: 1; text-align: center; font-size: calc(var(--u) * 24); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .team .score { font-size: calc(var(--u) * 36); min-width: calc(var(--u) * 18); text-align: center; line-height: 1; }
+        .logo { width: calc(var(--u) * 36); height: calc(var(--u) * 36); border-radius: 50%; flex: 0 0 auto; background: rgba(255,255,255,.55); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: calc(var(--u) * 20); }
+        .logo img { width: 100%; height: 100%; object-fit: contain; display: none; }
+        .logo.has-img img { display: block; }
+        .logo.has-img .badge { display: none; }
+
+        .info { flex: 1; background: #1b1b1b; color: #fff; display: flex; align-items: center; justify-content: space-around; box-sizing: border-box; padding: 0 calc(var(--u) * 3); min-width: 0; border-radius: 0 calc(var(--u) * 0) 0 0; }
+        .inning { display: flex; align-items: center; gap: calc(var(--u) * 3); font-size: calc(var(--u) * 30); }
+        .tri { font-size: calc(var(--u) * 20); line-height: 1; }
+
+        .diamond { position: relative; width: calc(var(--u) * 40); height: calc(var(--u) * 40); flex: 0 0 auto; }
+        /* 베이스: 크기·위치 고정(켜져도 border 두께/크기 동일, 글로우 없음 → 튀어나오지 않음). 색만 은은하게 채움. */
+        .base { position: absolute; width: calc(var(--u) * 13); height: calc(var(--u) * 13); background: transparent; border: calc(var(--u) * 2.4) solid #6f6f6f; transform: rotate(45deg); box-sizing: border-box; }
+        .base.on { background: #D9A23A; border-color: #D9A23A; }
+        /* 40u×40u 박스 안 중심좌표: 2루(20,11) 3루(10.5,21) 1루(29.5,21), 한 변 13u → left/top = 중심 - 6.5u */
+        #base2 { left: calc(var(--u) * 13.5); top: calc(var(--u) * 4.5); }
+        #base3 { left: calc(var(--u) * 4);    top: calc(var(--u) * 14.5); }
+        #base1 { left: calc(var(--u) * 23);   top: calc(var(--u) * 14.5); }
+
+        .bso { display: flex; align-items: center; gap: calc(var(--u) * 7); font-size: calc(var(--u) * 24); }
+        .grp { display: flex; align-items: center; gap: calc(var(--u) * 2.5); }
+        .dot { width: calc(var(--u) * 13); height: calc(var(--u) * 13); border-radius: 50%; background: transparent; border: calc(var(--u) * 1.8) solid #777; box-sizing: border-box; transition: background-color .2s; }
+        .dot.B.on { background: #00FF41; border-color: #00FF41; }
+        .dot.S.on { background: #FFEB3B; border-color: #FFEB3B; }
+        .dot.O.on { background: #FF3B30; border-color: #FF3B30; }
+
+        /* ── 데모(미리보기) 전용: ?demo=1 ── */
+        body.demo { background: linear-gradient(#7fb6e6 0 45%, #3f7a3a 45% 100%); }
+        body.demo { width: 100vw; height: 56.25vw; }
+    </style>
+</head>
+<body>
+<div class="bar" id="bar">
+    <div class="left">
+        <div class="lineup"><div id="lineup-text">준비 중...</div></div>
+        <div class="title"><span id="game-title"></span></div>
+    </div>
+    <div class="right">
+        <div class="team a">
+            <div class="logo" id="logo-a"><span class="badge" id="badge-a">A</span><img id="img-a" alt=""></div>
+            <div class="name" id="name-a">빅드림</div>
+            <div class="score" id="score-a">0</div>
+        </div>
+        <div class="team b">
+            <div class="score" id="score-b">0</div>
+            <div class="name" id="name-b">상대팀</div>
+            <div class="logo" id="logo-b"><span class="badge" id="badge-b">B</span><img id="img-b" alt=""></div>
+        </div>
+        <div class="info">
+            <div class="inning"><span id="inning-num">1</span><span class="tri" id="inning-tri">▲</span></div>
+            <div class="diamond"><div id="base2" class="base"></div><div id="base3" class="base"></div><div id="base1" class="base"></div></div>
+            <div class="bso">
+                <div class="grp"><span>B</span><div id="b1" class="dot B"></div><div id="b2" class="dot B"></div><div id="b3" class="dot B"></div></div>
+                <div class="grp"><span>S</span><div id="s1" class="dot S"></div><div id="s2" class="dot S"></div></div>
+                <div class="grp"><span>O</span><div id="o1" class="dot O"></div><div id="o2" class="dot O"></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ── 설정(URL 파라미터) ─────────────────────────────────────────────
+    //  ?id=...      PeerJS 수신 ID(기본값은 기존 세로형 뷰어와 동일 → 컨트롤러 그대로 사용).
+    //               기존 뷰어와 동시에 띄워 비교하려면 서로 다른 id를 쓰고 컨트롤러도 같은 ?id= 로 여세요.
+    //  ?title=...   좌하단 대회명        ?logoA=URL  ?logoB=URL  팀 로고 이미지(없으면 글자 배지)
+    //  ?demo=1      미리보기(샘플 값 + 배경)
+    const Q = new URLSearchParams(location.search);
+    const MY_ID = Q.get('id') || 'jiho-papa-live-viewer';
+    const LS_KEY = 'bdb_scoreboard_state';   // 기존 뷰어와 같은 키 → 뷰어를 바꿔도 점수/이름 유지
+    const DEMO = !!window.DEMO || Q.get('demo') === '1';
+    let peer = null;
+
+    const defaultState = {
+        nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0,
+        inning: 1, isTop: true,
+        base1: false, base2: false, base3: false,
+        b: 0, s: 0, o: 0, lineupHtml: '준비 중...',
+        title: '', logoA: '', logoB: ''
+    };
+    function loadState() {
+        try { const j = localStorage.getItem(LS_KEY); if (j) return Object.assign({}, defaultState, JSON.parse(j)); }
+        catch (e) {}
+        return Object.assign({}, defaultState);
+    }
+    function saveState() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {} }
+    let state = loadState();
+    if (Q.get('title') !== null) state.title = Q.get('title');
+    if (Q.get('logoA') !== null) state.logoA = Q.get('logoA');
+    if (Q.get('logoB') !== null) state.logoB = Q.get('logoB');
+    if (DEMO) {
+        document.body.classList.add('demo');
+        Object.assign(state, { nameA: '빅드림', nameB: '파주BTAC', scoreA: 0, scoreB: 1, inning: 2, isTop: false,
+            base1: false, base2: true, base3: false, b: 0, s: 0, o: 2,
+            title: state.title || '2025서울컵 새싹준결승',
+            lineupHtml: '<div style="display:flex;justify-content:space-between;width:100%;"><span>1.최지호(P)</span><span></span></div>' });
+    }
+
+    function setLogo(prefix, url, name) {
+        const box = document.getElementById('logo-' + prefix);
+        const img = document.getElementById('img-' + prefix);
+        document.getElementById('badge-' + prefix).textContent = (name || '').trim().charAt(0) || (prefix === 'a' ? 'A' : 'B');
+        if (url) { img.onload = () => box.classList.add('has-img'); img.onerror = () => box.classList.remove('has-img'); if (img.getAttribute('src') !== url) img.src = url; }
+        else { box.classList.remove('has-img'); img.removeAttribute('src'); }
+    }
+
+    function render() {
+        document.getElementById('name-a').innerText = state.nameA;
+        document.getElementById('name-b').innerText = state.nameB;
+        document.getElementById('score-a').innerText = state.scoreA;
+        document.getElementById('score-b').innerText = state.scoreB;
+        document.getElementById('inning-num').innerText = state.inning;
+        document.getElementById('inning-tri').innerText = state.isTop ? '▲' : '▼';
+        document.getElementById('base1').classList.toggle('on', !!state.base1);
+        document.getElementById('base2').classList.toggle('on', !!state.base2);
+        document.getElementById('base3').classList.toggle('on', !!state.base3);
+        for (let i = 1; i <= 3; i++) document.getElementById('b' + i)?.classList.toggle('on', state.b >= i);
+        for (let i = 1; i <= 2; i++) document.getElementById('s' + i)?.classList.toggle('on', state.s >= i);
+        for (let i = 1; i <= 2; i++) document.getElementById('o' + i)?.classList.toggle('on', state.o >= i);
+        document.getElementById('lineup-text').innerHTML = state.lineupHtml;
+        document.getElementById('game-title').innerText = state.title || '';
+        setLogo('a', state.logoA, state.nameA);
+        setLogo('b', state.logoB, state.nameB);
+    }
+
+    function escapeHtml(t) {
+        return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // 컨트롤러(PeerJS)에서 받은 델타를 state에 병합 후 렌더 → 컨트롤러/앱 제어가 같은 상태를 공유.
+    function applyData(data) {
+        if (data.html !== undefined) state.lineupHtml = data.html;
+        else if (data.text !== undefined) state.lineupHtml = escapeHtml(data.text);
+        if (data.nameA !== undefined) state.nameA = data.nameA;
+        if (data.nameB !== undefined) state.nameB = data.nameB;
+        if (data.scoreA !== undefined) state.scoreA = data.scoreA;
+        if (data.scoreB !== undefined) state.scoreB = data.scoreB;
+        if (data.inning !== undefined) state.inning = data.inning;
+        if (data.isTop !== undefined) state.isTop = data.isTop;
+        if (data.base1 !== undefined) state.base1 = data.base1;
+        if (data.base2 !== undefined) state.base2 = data.base2;
+        if (data.base3 !== undefined) state.base3 = data.base3;
+        if (data.b !== undefined) state.b = data.b;
+        if (data.s !== undefined) state.s = data.s;
+        if (data.o !== undefined) state.o = data.o;
+        // 선택 필드(컨트롤러가 보내면 반영): 대회명 / 팀 로고
+        if (data.title !== undefined) state.title = data.title;
+        if (data.logoA !== undefined) state.logoA = data.logoA;
+        if (data.logoB !== undefined) state.logoB = data.logoB;
+        saveState();
+        render();
+    }
+
+    // ── 방송앱 리모컨 제어 API (기존 세로형 뷰어와 동일) ──────────────
+    function bdbToggleBase(n) { state['base' + n] = !state['base' + n]; saveState(); render(); }
+    function bdbBall()   { state.b = (state.b + 1) % 4; saveState(); render(); }
+    function bdbStrike() { state.s = (state.s + 1) % 3; saveState(); render(); }
+    function bdbOut()    { state.o = (state.o + 1) % 3; saveState(); render(); }
+    function bdbSwapTeams() {
+        const n = state.nameA; state.nameA = state.nameB; state.nameB = n;
+        const sc = state.scoreA; state.scoreA = state.scoreB; state.scoreB = sc;
+        saveState(); render();
+    }
+    function bdbScore(team, delta) {
+        if (team === 'a') state.scoreA = Math.max(0, state.scoreA + delta);
+        else state.scoreB = Math.max(0, state.scoreB + delta);
+        saveState(); render();
+    }
+    function bdbReset(keepNames) {
+        const a = state.nameA, b = state.nameB, t = state.title, la = state.logoA, lb = state.logoB;
+        state = Object.assign({}, defaultState);
+        state.title = t; state.logoA = la; state.logoB = lb;
+        if (keepNames) { state.nameA = a; state.nameB = b; }
+        saveState(); render();
+    }
+    function bdbSetNames(a, b) {
+        if (a !== undefined && a !== null && a !== '') state.nameA = a;
+        if (b !== undefined && b !== null && b !== '') state.nameB = b;
+        saveState(); render();
+    }
+    function bdbInning(delta) { state.inning = Math.max(1, (state.inning | 0) + delta); saveState(); render(); }
+    function bdbToggleTop() { state.isTop = !state.isTop; saveState(); render(); }
+    function bdbSetLineup(t) { state.lineupHtml = escapeHtml(t); saveState(); render(); }
+    function bdbSetTitle(t) { state.title = String(t || ''); saveState(); render(); }
+    function bdbSetLogos(a, b) { if (a !== undefined) state.logoA = a || ''; if (b !== undefined) state.logoB = b || ''; saveState(); render(); }
+    window.bdbToggleBase = bdbToggleBase; window.bdbBall = bdbBall;
+    window.bdbStrike = bdbStrike; window.bdbOut = bdbOut;
+    window.bdbSwapTeams = bdbSwapTeams; window.bdbScore = bdbScore;
+    window.bdbReset = bdbReset; window.bdbSetNames = bdbSetNames;
+    window.bdbInning = bdbInning; window.bdbToggleTop = bdbToggleTop;
+    window.bdbSetLineup = bdbSetLineup; window.bdbSetTitle = bdbSetTitle; window.bdbSetLogos = bdbSetLogos;
+    window.applyData = applyData;
+
+    // ── 크기 보정: 바 높이를 100등분한 값을 --u 로 설정 ──
+    function fit() {
+        const h = document.getElementById('bar').clientHeight || window.innerHeight;
+        document.documentElement.style.setProperty('--u', (h / 100) + 'px');
+    }
+    window.addEventListener('resize', fit);
+
+    render();
+    fit();
+    setTimeout(fit, 50);   // 레이아웃 확정 후 한 번 더
+
+    // 🛡️ 뷰어 연결 및 자동 복구 (기존 뷰어와 동일 로직: ping→pong, 종료 시 정리, 중복 재시도 방지)
+    let conns = [];
+    let reinitTimer = null;
+    function scheduleInit(ms) {
+        if (reinitTimer) return;
+        reinitTimer = setTimeout(() => { reinitTimer = null; initViewerPeer(); }, ms);
+    }
+    function initViewerPeer() {
+        if (typeof Peer === 'undefined') return;   // 오프라인/미리보기
+        try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+        conns = [];
+        const p = new Peer(MY_ID);
+        peer = p;
+        p.on('open', (id) => { console.log('✅ 뷰어 방 생성 완료:', id); });
+        p.on('connection', (conn) => {
+            conns.push(conn);
+            conn.on('open', () => { try { conn.send({ req: 'sync' }); } catch (e) {} });
+            conn.on('data', (data) => {
+                if (data && data.req === 'ping') { try { conn.send({ req: 'pong' }); } catch (e) {} return; }
+                if (data && data.req !== undefined) return;
+                applyData(data);
+            });
+            const drop = () => { conns = conns.filter(x => x !== conn); };
+            conn.on('close', drop);
+            conn.on('error', drop);
+        });
+        p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
+        p.on('error', (err) => {
+            if (p !== peer) return;
+            console.error('❌ Peer 에러, 3초 후 재초기화:', err);
+            scheduleInit(3000);
+        });
+    }
+    if (!DEMO) initViewerPeer();
+
+    function cleanupPeer() {
+        try { conns.forEach(c => { try { c.close(); } catch (e) {} }); } catch (e) {}
+        try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+    }
+    window.addEventListener('pagehide', cleanupPeer);
+    window.addEventListener('beforeunload', cleanupPeer);
+
+    setInterval(() => {
+        if (DEMO || typeof Peer === 'undefined') return;
+        if (!peer || peer.destroyed) scheduleInit(0);
+        else if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} }
+    }, 5000);
+</script>
+</body>
+</html>
