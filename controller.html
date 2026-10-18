@@ -217,9 +217,9 @@
 
     const PLAYER_DB_KEY = 'bb_players_master';
     const DEFAULT_PLAYERS = {
-        "새싹": ["최지호", "양현준", "김재윤", "유하진", "홍현서", "손우진", "나라온", "김리호", "나라찬", "이승빈", "이태윤", "김재호"],
-        "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "박승재", "박지원", "윤예건"],
-        "유소년": ["김지겸", "이승현", "박건희", "구도영", "이현성", "이준성", "신주호", "오종원"]
+        "새싹": ["최지호", "양현준", "김재윤", "유하진", "홍현서", "손우진", "나라온", "김리호", "나라찬", "이승빈", "이태윤", "김재호", "김재준", "박연우"],
+        "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "꿈나무9"],
+        "유소년": ["최이안", "김지겸", "이승현", "박건희", "구도영", "이현성", "이준성", "신주호", "오종원"]
     };
 
     let PLAYERS = JSON.parse(localStorage.getItem(PLAYER_DB_KEY)) || DEFAULT_PLAYERS;
@@ -243,21 +243,127 @@
 
     let currentMainTab = 'score';
 
-    function initConn() {
-        if (!peer) return;
-        if (peer.disconnected) peer.reconnect();
-        if (conn) conn.close();
-        conn = peer.connect(TARGET_ID);
-        conn.on('open', () => {
-            document.getElementById('status').innerHTML = "✅ 방송 연결됨 <button onclick='initConn()' style='padding:2px 5px; font-size:10px; background:#444; border:none; color:white; border-radius:4px;'>🔄</button>";
-            document.getElementById('status').style.color = "#32D74B";
+    const PENDING_MS = 15000;   // 협상 중(아직 안 열린) 연결은 이 시간 동안 끊지 않고 기다림
+    let connStart = 0;
+    let iceDiscSince = 0;
+    let peerRestartTimer = null;
+
+    // ── 뷰어(방송앱) 생존 확인: ping/pong. 뷰어가 pong을 지원할 때만(구버전 호환) 강제 판정에 사용 ──
+    let lastRx = 0;            // 뷰어로부터 마지막 수신 시각(pong/sync 포함)
+    let viewerPong = false;    // 뷰어가 pong 응답을 지원하는지(첫 pong 수신 시 true)
+    let lastActionProbe = 0;
+
+    function rawSend(obj) {
+        try { if (conn && conn.open) { conn.send(obj); return true; } } catch (e) {}
+        return false;
+    }
+
+    function setLinkStatus(ok, msg) {
+        const el = document.getElementById('status');
+        if (!el) return;
+        const btn = "<button onclick='initConn(true)' style='padding:2px 5px; font-size:10px; background:#444; border:none; color:white; border-radius:4px;'>🔄</button>";
+        if (ok) {
+            el.innerHTML = "✅ 방송 연결됨 " + btn;
+            el.style.color = "#32D74B";
+        } else {
+            el.innerHTML = "🟠 " + (msg || "방송 앱에 연결 중…") + " " + btn;
+            el.style.color = "#FF9F0A";
+        }
+    }
+
+    // 조작 직후 헬스체크: 뷰어가 pong을 지원하면 1.5초 안에 응답이 없을 때 즉시 재접속
+    // (재접속되면 open에서 syncAll → 누락된 조작도 최신 상태로 다시 전달됨)
+    function probeOnAction() {
+        if (!viewerPong || !conn || !conn.open) return;
+        const now = Date.now();
+        if (now - lastActionProbe < 3000) return;
+        lastActionProbe = now;
+        rawSend({ req: 'ping' });
+        setTimeout(() => {
+            if (lastRx < now) { setLinkStatus(false, '응답 없음 — 재연결 중…'); initConn(true); }
+        }, 1500);
+    }
+
+    // WebRTC 상태로 '열려 있지만 사실상 죽은' 연결 감지(백그라운드 복귀 직후 등)
+    function iceDead(c) {
+        try {
+            const pc = c && c.peerConnection;
+            if (!pc) return false;
+            const s = pc.iceConnectionState;
+            if (s === 'failed' || s === 'closed') return true;
+            if (s === 'disconnected') {
+                if (!iceDiscSince) iceDiscSince = Date.now();
+                return Date.now() - iceDiscSince > 5000;
+            }
+            iceDiscSince = 0;
+        } catch (e) {}
+        return false;
+    }
+
+    function initConn(force) {
+        // 피어가 죽었으면 새로 만들고(open 이벤트에서 다시 initConn), 시그널링이 끊겼으면 재접속만.
+        if (!peer) return;   // 아직 컨트롤러 시작 전(암호 게이트 등)
+        if (peer.destroyed) { restartPeer(); return; }
+        if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} return; }
+        if (!peer.open) return;   // 시그널링 등록 대기
+        // 협상 중인 연결을 2초마다 끊고 새로 시작하면(느린 ICE/TURN) 영영 못 붙으므로 일정 시간 기다림. 수동 🔄는 force.
+        if (force !== true && conn && !conn.open && Date.now() - connStart < PENDING_MS) return;
+        try { if (conn) conn.close(); } catch (e) {}
+        iceDiscSince = 0;
+        connStart = Date.now();
+        const c = peer.connect(TARGET_ID);
+        conn = c;
+        setLinkStatus(false, '방송 앱에 연결 중…');
+        c.on('open', () => {
+            if (conn !== c) return;
+            lastRx = Date.now();
+            setLinkStatus(true);
             syncAll();
         });
         // 🔄 뷰어(방송앱)가 reload 후 재접속하면 "현재 상태 줘"라고 요청 → 즉시 전체 동기화 응답.
-        conn.on('data', (d) => {
+        c.on('data', (d) => {
+            lastRx = Date.now();
+            if (d && d.req === 'pong') { viewerPong = true; return; }
             if (d && d.req === 'sync') syncAll();
         });
+        // 끝난 연결은 비워서 다음 시도가 '대기 중' 가드에 막히지 않게 함
+        const lost = () => { if (conn === c) { conn = null; setLinkStatus(false, '연결 끊김 — 재연결 중…'); } };
+        c.on('close', lost);
+        c.on('error', lost);
     }
+
+    function startPeer() {
+        const p = new Peer();
+        peer = p;
+        p.on('open', () => { if (p === peer) initConn(true); });
+        p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
+        p.on('error', (err) => {
+            if (p !== peer) return;   // 교체된 이전 피어의 에러는 무시
+            // 뷰어가 아직 없음 → 피어 유지, 다음 주기(2초)에 다시 시도
+            if (err && err.type === 'peer-unavailable') { conn = null; return; }
+            restartPeer();
+        });
+    }
+
+    function restartPeer() {
+        if (peerRestartTimer) return;
+        peerRestartTimer = setTimeout(() => {
+            peerRestartTimer = null;
+            try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
+            conn = null;
+            startPeer();
+        }, 1000);
+    }
+
+    // 백그라운드 복귀: 즉시 점검, 열린 연결은 죽었는지 확인해 빠르게 재접속
+    function onResume() {
+        if (!peer) return;
+        if (conn && conn.open && iceDead(conn)) { initConn(true); return; }
+        if (!conn || !conn.open) initConn();
+    }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) onResume(); });
+    window.addEventListener('online', onResume);
+    window.addEventListener('pageshow', onResume);
 
     function setMainTab(tab) {
         currentMainTab = tab;
@@ -306,7 +412,9 @@
         scoreState.nameB = document.getElementById('nameB').value;
         localStorage.setItem(SCORE_KEY, JSON.stringify(scoreState));
         updateScoreUI();
-        if(conn && conn.open) conn.send(scoreState);
+        // 연결이 열려 있으면 전송 + 헬스체크, 아니면 즉시 재접속 시도(open 시 전체 상태가 재전송됨)
+        if (rawSend(scoreState)) probeOnAction();
+        else initConn();
     }
 
     function updateScoreUI() {
@@ -417,7 +525,7 @@
     }
 
     function sendLineupData() {
-        if(!conn || !conn.open) return;
+        if(!conn || !conn.open) { initConn(); return; }
         const curL = lineupState[scoreState.currentClass];
         let html = "";
         if(scoreState.gameMode === 'offense') {
@@ -426,7 +534,7 @@
         } else {
             html = `<div style="display:flex; justify-content:space-between; width:100%;"><span>P. ${curL.pName}</span><span>⚾️ ${curL.pCount}</span></div>`;
         }
-        conn.send({ html });
+        rawSend({ html });
     }
 
     function syncAll() { updateScoreState(); sendLineupData(); }
@@ -438,12 +546,18 @@
     }
 
     function startController() {
-        peer = new Peer();
-        peer.on('open', initConn);
-        // 끊김 감지 재접속(2초 주기) — viewer reload 후 빠르게 복구.
-        setInterval(() => { if(!conn || !conn.open) initConn(); }, 2000);
+        startPeer();
+        // 끊김 감지 재접속(2초 주기) — viewer reload 후 빠르게 복구. 열려 있어도 WebRTC가 죽었으면 재접속.
+        setInterval(() => {
+            if (!conn || !conn.open) { initConn(); return; }
+            rawSend({ req: 'ping' });   // 뷰어가 pong 지원 시 생존 확인(구버전 뷰어는 req 메시지를 무시)
+            if (iceDead(conn) || (viewerPong && Date.now() - lastRx > 7000)) {
+                setLinkStatus(false, '연결 불안정 — 재연결 중…');
+                initConn(true);
+            }
+        }, 2000);
         // 상태 하트비트(5초) — 패킷 누락/재접속 직후에도 최신 상태가 곧 반영되도록 안전망.
-        setInterval(() => { if(conn && conn.open) { conn.send(scoreState); sendLineupData(); } }, 5000);
+        setInterval(() => { if (rawSend(scoreState)) sendLineupData(); }, 5000);
         setMainTab('score');
     }
 
