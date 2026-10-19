@@ -27,10 +27,12 @@
         /* ── 우측: 팀A / 팀B / 이닝·베이스·카운트 (아래 한 줄) ── */
         .right { flex: 1; height: 50%; display: flex; align-items: stretch; }
         .team { flex: 0 0 28.5%; display: flex; align-items: center; box-sizing: border-box; padding: 0 calc(var(--u) * 4); gap: calc(var(--u) * 4); min-width: 0; }
-        .team.a { background: #00B7EB; color: #0a2a44; border-radius: 0; }
-        .team.b { background: #FFE600; color: #222; }
+        /* 두 팀 점수가 맞붙는 안쪽(A의 오른쪽/B의 왼쪽)에 여백을 더 줘서 점수 사이 간격 확보 */
+        .team.a { background: #00B7EB; color: #0a2a44; border-radius: 0; padding-right: calc(var(--u) * 11); }
+        .team.b { background: #FFE600; color: #222; padding-left: calc(var(--u) * 11); }
         .team .name { flex: 1; text-align: center; font-size: calc(var(--u) * 24); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-        .team .score { font-size: calc(var(--u) * 36); min-width: calc(var(--u) * 18); text-align: center; line-height: 1; }
+        /* 점수 칸 폭 고정(두 자리 10~99도 수용) → 한 자리↔두 자리 전환 시 팀명이 흔들리거나 UI가 깨지지 않음 */
+        .team .score { font-size: calc(var(--u) * 36); flex: 0 0 auto; width: calc(var(--u) * 42); text-align: center; line-height: 1; white-space: nowrap; overflow: hidden; }
         .logo { width: calc(var(--u) * 36); height: calc(var(--u) * 36); border-radius: 50%; flex: 0 0 auto; background: rgba(255,255,255,.55); display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: calc(var(--u) * 20); }
         .logo img { width: 100%; height: 100%; object-fit: contain; display: none; }
         .logo.has-img img { display: block; }
