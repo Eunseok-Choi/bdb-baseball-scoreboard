@@ -38,7 +38,7 @@
 </head>
 <body>
 <div class="master-container">
-    <div class="title-bar" id="game-title" style="display:none;"></div>
+    <div class="title-bar" id="game-title" style="visibility:hidden;">&nbsp;</div>
     <div class="scoreboard">
         <div class="score-row">
             <div class="team-box" id="name-a">빅드림</div>
@@ -93,8 +93,9 @@
         for (let i = 1; i <= 2; i++) document.getElementById('o' + i)?.classList.toggle('on', state.o >= i);
         document.getElementById('lineup-text').innerHTML = state.lineupHtml;
         const gt = document.getElementById('game-title');
-        gt.textContent = state.title || '';
-        gt.style.display = state.title ? 'block' : 'none';   // 대회명 없으면 칸 숨김
+        // 칸은 항상 자리를 차지(비어 있으면 투명) → 앱이 측정한 오버레이 크기가 대회명 유무와 무관하게 일정(하단 잘림 방지)
+        gt.textContent = state.title || '\u00A0';
+        gt.style.visibility = state.title ? 'visible' : 'hidden';
     }
 
     function escapeHtml(t) {
