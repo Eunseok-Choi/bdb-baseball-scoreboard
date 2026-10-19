@@ -11,10 +11,10 @@
         :root { --u: 1vh; }
         html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
         body { font-family: 'Noto Sans KR', 'Malgun Gothic', 'Apple SD Gothic Neo', 'Segoe UI', sans-serif; font-weight: 900; }
-        /* 앱의 웹 오버레이는 16:9 캔버스 전체를 뷰포트로 렌더 → 바는 '캔버스 하단'에 가로폭 기준(vw)으로 배치.
-           (바 높이 = 폭의 8.68% → 16:9에서 화면 높이의 약 15%). 좌우/하단 안전 여백 포함 → 가이드라인 안쪽.
-           오버레이 박스는 풀(0,0,100%,100%)로 두면 1:1로 보임. */
-        .bar { position: fixed; left: 1.2vw; right: 1.2vw; bottom: 2vh; height: calc((100vw - 2.4vw) * 0.0868); display: flex; align-items: flex-end; }
+        /* 앱은 오버레이 페이지에서 '내용이 차지하는 영역(우/하단 최대값)'을 재서 박스 크기로 삼음(기존 스코어보드와 동일).
+           → 바를 페이지 좌상단에 두고 바 크기만큼만 차지하게 함. 바 폭 = 화면폭의 97.6%, 높이 = 폭의 8.68%.
+           앱에서 '100%'를 누르고 박스를 화면 하단으로 옮기면 됨(위치는 앱의 박스로 결정). */
+        .bar { position: fixed; left: 1.2vw; top: 0; width: 97.6vw; height: calc(97.6vw * 0.0868); display: flex; align-items: flex-end; }
 
         /* ── 좌측: 위(타자/투수 라인업) + 아래(대회명) ── */
         .left { flex: 0 0 21.8%; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
@@ -59,6 +59,7 @@
         /* ── 데모(미리보기) 전용: ?demo=1 ── */
         body.demo { background: linear-gradient(#7fb6e6 0 45%, #3f7a3a 45% 100%); }
         body.demo { width: 100vw; height: 56.25vw; }
+        body.demo .bar { top: auto; bottom: 2vh; }
     </style>
 </head>
 <body>
