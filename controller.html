@@ -97,6 +97,7 @@
 
 <div id="panel-score">
     <div class="card">
+        <input type="text" id="gameTitle" class="team-input" placeholder="대회명 (예: 2025서울컵 새싹준결승)" onchange="updateScoreState()" style="margin-bottom:10px;">
         <div class="grid-score">
             <div class="team-col">
                 <input type="text" id="nameA" class="team-input" onchange="updateScoreState()">
@@ -211,14 +212,15 @@
 </div>
 
 <script>
-    const TARGET_ID = 'jiho-papa-live-viewer';
+    // ?id=... 로 다른 뷰어(예: 가로형 테스트)를 지정 가능. 기본값은 기존 뷰어.
+    const TARGET_ID = new URLSearchParams(location.search).get('id') || 'jiho-papa-live-viewer';
     let peer = null;
     let conn = null;
 
     const PLAYER_DB_KEY = 'bb_players_master';
     const DEFAULT_PLAYERS = {
-        "새싹": ["최지호", "양현준", "김재윤", "유하진", "홍현서", "손우진", "나라온", "김리호", "나라찬", "이승빈", "이태윤", "김재호", "김재준", "박연우"],
-        "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "꿈나무9"],
+        "새싹": ["최지호", "양현준", "김재윤", "유하진", "홍현서", "손우진", "나라온", "김리호", "나라찬", "이승빈"],
+        "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "꿈나무9", "최지호", "김재윤", "유하진", "홍현서"],
         "유소년": ["최이안", "김지겸", "이승현", "박건희", "구도영", "이현성", "이준성", "신주호", "오종원"]
     };
 
@@ -234,6 +236,9 @@
         base1: false, base2: false, base3: false, b: 0, s: 0, o: 0,
         currentClass: '새싹', gameMode: 'offense'
     };
+
+    // 대회명은 날짜와 무관하게 유지(별도 키) → 매일 다시 입력할 필요 없음
+    scoreState.title = localStorage.getItem('bb_game_title') || scoreState.title || '';
 
     let lineupState = JSON.parse(localStorage.getItem(LINEUP_KEY)) || {
         새싹: { activeIdx: 0, list: Array(9).fill(null).map((_, i) => ({ name: PLAYERS["새싹"][i]||'선수', pos: POSITIONS[i]||'DH', results: [] })), pName: PLAYERS["새싹"][0], pCount: 0 },
@@ -410,6 +415,8 @@
     function updateScoreState() {
         scoreState.nameA = document.getElementById('nameA').value;
         scoreState.nameB = document.getElementById('nameB').value;
+        scoreState.title = document.getElementById('gameTitle').value.trim();
+        localStorage.setItem('bb_game_title', scoreState.title);
         localStorage.setItem(SCORE_KEY, JSON.stringify(scoreState));
         updateScoreUI();
         // 연결이 열려 있으면 전송 + 헬스체크, 아니면 즉시 재접속 시도(open 시 전체 상태가 재전송됨)
@@ -420,6 +427,8 @@
     function updateScoreUI() {
         document.getElementById('nameA').value = scoreState.nameA;
         document.getElementById('nameB').value = scoreState.nameB;
+        const gt = document.getElementById('gameTitle');
+        if (document.activeElement !== gt) gt.value = scoreState.title || '';
         document.getElementById('disp-scoreA').innerText = scoreState.scoreA;
         document.getElementById('disp-scoreB').innerText = scoreState.scoreB;
         document.getElementById('disp-inning').innerText = scoreState.inning + "회 " + (scoreState.isTop?'초':'말');
