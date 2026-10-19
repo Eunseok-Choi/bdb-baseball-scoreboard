@@ -101,11 +101,13 @@
         <div class="grid-score">
             <div class="team-col">
                 <input type="text" id="nameA" class="team-input" onchange="updateScoreState()">
+                <input type="url" id="logoA" class="team-input" placeholder="로고 URL (선택)" onchange="updateScoreState()" style="font-size:11px;">
                 <div class="score-display" id="disp-scoreA">0</div>
                 <div class="score-ctrl"><button class="btn-s btn-minus" onclick="addScore('scoreA',-1)">-</button><button class="btn-s btn-plus" onclick="addScore('scoreA',1)">+</button></div>
             </div>
             <div class="team-col">
                 <input type="text" id="nameB" class="team-input" onchange="updateScoreState()">
+                <input type="url" id="logoB" class="team-input" placeholder="로고 URL (선택)" onchange="updateScoreState()" style="font-size:11px;">
                 <div class="score-display" id="disp-scoreB">0</div>
                 <div class="score-ctrl"><button class="btn-s btn-minus" onclick="addScore('scoreB',-1)">-</button><button class="btn-s btn-plus" onclick="addScore('scoreB',1)">+</button></div>
             </div>
@@ -239,6 +241,9 @@
 
     // 대회명은 날짜와 무관하게 유지(별도 키) → 매일 다시 입력할 필요 없음
     scoreState.title = localStorage.getItem('bb_game_title') || scoreState.title || '';
+    // 팀 로고 URL도 날짜와 무관하게 유지(가로형 뷰어 전용 — 세로형은 무시)
+    scoreState.logoA = localStorage.getItem('bb_logo_a') || scoreState.logoA || '';
+    scoreState.logoB = localStorage.getItem('bb_logo_b') || scoreState.logoB || '';
 
     let lineupState = JSON.parse(localStorage.getItem(LINEUP_KEY)) || {
         새싹: { activeIdx: 0, list: Array(9).fill(null).map((_, i) => ({ name: PLAYERS["새싹"][i]||'선수', pos: POSITIONS[i]||'DH', results: [] })), pName: PLAYERS["새싹"][0], pCount: 0 },
@@ -417,6 +422,10 @@
         scoreState.nameB = document.getElementById('nameB').value;
         scoreState.title = document.getElementById('gameTitle').value.trim();
         localStorage.setItem('bb_game_title', scoreState.title);
+        scoreState.logoA = document.getElementById('logoA').value.trim();
+        scoreState.logoB = document.getElementById('logoB').value.trim();
+        localStorage.setItem('bb_logo_a', scoreState.logoA);
+        localStorage.setItem('bb_logo_b', scoreState.logoB);
         localStorage.setItem(SCORE_KEY, JSON.stringify(scoreState));
         updateScoreUI();
         // 연결이 열려 있으면 전송 + 헬스체크, 아니면 즉시 재접속 시도(open 시 전체 상태가 재전송됨)
@@ -429,6 +438,10 @@
         document.getElementById('nameB').value = scoreState.nameB;
         const gt = document.getElementById('gameTitle');
         if (document.activeElement !== gt) gt.value = scoreState.title || '';
+        ['A', 'B'].forEach(k => {
+            const el = document.getElementById('logo' + k);
+            if (document.activeElement !== el) el.value = scoreState['logo' + k] || '';
+        });
         document.getElementById('disp-scoreA').innerText = scoreState.scoreA;
         document.getElementById('disp-scoreB').innerText = scoreState.scoreB;
         document.getElementById('disp-inning').innerText = scoreState.inning + "회 " + (scoreState.isTop?'초':'말');
