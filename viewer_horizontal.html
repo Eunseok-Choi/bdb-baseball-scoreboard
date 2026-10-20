@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>가로형 스코어 보드 뷰어 (하단 바)</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="fb-config.js"></script>
     <style>
         /* 모든 크기는 --u(= 바 높이/100)의 배수로 정의 → 오버레이 박스를 어떤 크기로 잡아도 비율 유지.
            오버레이 박스는 풀 화면(16:9 캔버스 전체)으로 두면 바가 하단에 1:1로 표시됨. */
@@ -236,56 +238,47 @@
     fit();
     setTimeout(fit, 50);   // 레이아웃 확정 후 한 번 더
 
-    // 🛡️ 뷰어 연결 및 자동 복구 (기존 뷰어와 동일 로직: ping→pong, 종료 시 정리, 중복 재시도 방지)
-    let conns = [];
-    let reinitTimer = null;
-    function scheduleInit(ms) {
-        if (reinitTimer) return;
-        reinitTimer = setTimeout(() => { reinitTimer = null; initViewerPeer(); }, ms);
-    }
-    function initViewerPeer() {
-        if (typeof Peer === 'undefined') return;   // 오프라인/미리보기
-        try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
-        conns = [];
-        const p = new Peer(MY_ID);
-        peer = p;
-        p.on('open', (id) => { console.log('✅ 뷰어 방 생성 완료:', id); });
-        p.on('connection', (conn) => {
-            conns.push(conn);
-            conn.on('open', () => { try { conn.send({ req: 'sync' }); } catch (e) {} });
-            conn.on('data', (data) => {
-                if (data && data.req === 'ping') { try { conn.send({ req: 'pong' }); } catch (e) {} return; }
-                if (data && data.req !== undefined) return;
-                applyData(data);
+    // ☁️ Firebase Realtime Database 연결 (PeerJS 대체)
+    // 컨트롤러가 rooms/{room}/score(전체 상태)·lineup(라인업 HTML)에 쓰면, 값이 바뀔 때마다 여기로 수신된다.
+    // 서버가 마지막 값을 보관 → 새로고침/재접속 직후에도 즉시 최신 상태를 받음(별도 '동기화 요청' 불필요).
+    // 끊김/재연결은 Firebase SDK가 자동 처리. 방(room)은 오버레이 URL의 ?room= 으로 지정(앱이 기본 오버레이 URL에 포함).
+    const FB_ROOM = (function () {
+        let r = Q.get('room') || '';
+        try { if (r) localStorage.setItem('fb_room', r); else r = localStorage.getItem('fb_room') || ''; } catch (e) {}
+        return r;
+    })();
+    // 접속 표시용 고유 키(재로드 직전 페이지의 늦은 disconnect가 새 페이지 표시를 지우지 않게 매번 다른 키)
+    const FB_VID = (Q.get('vid') || 'h') + '-' + Math.random().toString(36).slice(2, 6);
+    let fbConnected = false;
+
+    function fbStart() {
+        if (typeof firebase === 'undefined' || !window.FB_CONFIG || !FB_ROOM) { console.warn('Firebase 미설정/미로딩'); return; }
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(window.FB_CONFIG);
+            const db = firebase.database();
+            const base = db.ref('rooms/' + FB_ROOM);
+            db.ref('.info/connected').on('value', (s) => {
+                fbConnected = s.val() === true;
+                if (fbConnected) {   // 연결될 때마다 '뷰어 접속 중' 표시(끊기면 서버가 자동 삭제) → 컨트롤러가 개수 표시
+                    const me = base.child('viewers/' + FB_VID);
+                    me.onDisconnect().remove();
+                    me.set(firebase.database.ServerValue.TIMESTAMP);
+                }
             });
-            const drop = () => { conns = conns.filter(x => x !== conn); };
-            conn.on('close', drop);
-            conn.on('error', drop);
-        });
-        p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
-        p.on('error', (err) => {
-            if (p !== peer) return;
-            console.error('❌ Peer 에러, 3초 후 재초기화:', err);
-            scheduleInit(3000);
-        });
+            base.child('score').on('value', (s) => { const v = s.val(); if (v) applyData(v); });
+            base.child('lineup').on('value', (s) => { const v = s.val(); if (v && v.html !== undefined) applyData({ html: v.html }); });
+        } catch (e) { console.error('Firebase 초기화 실패', e); }
     }
-    if (!DEMO) initViewerPeer();
+    if (!DEMO) fbStart();
 
-    function cleanupPeer() {
-        try { conns.forEach(c => { try { c.close(); } catch (e) {} }); } catch (e) {}
-        try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
-    }
-    window.addEventListener('pagehide', cleanupPeer);
-    // 앱(안드로이드)이 주기적으로 호출하는 상태 점검: PeerJS 서버에 ID가 등록되어 있고 끊기지 않았으면 true.
-    // 오래 false면 앱이 이 오버레이를 새로고침해 연결을 복구함.
-    window.bdbHealth = function () { return !!(peer && peer.open && !peer.disconnected && !peer.destroyed); };
-    window.addEventListener('beforeunload', cleanupPeer);
+    // 앱(안드로이드)이 주기적으로 호출하는 상태 점검: 서버에 연결돼 있으면 true. 오래 false면 앱이 이 오버레이를 새로고침.
+    // 방이 지정되지 않았거나 미리보기(DEMO)는 새로고침해도 소용없으므로 true(점검 제외).
+    window.bdbHealth = function () { return (DEMO || !FB_ROOM) ? true : fbConnected; };
 
-    setInterval(() => {
-        if (DEMO || typeof Peer === 'undefined') return;
-        if (!peer || peer.destroyed) scheduleInit(0);
-        else if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} }
-    }, 5000);
+    // 페이지 이탈/리로드(앱의 30분 주기 새로고침 포함) 때 접속 표시를 즉시 제거(최선; 못 해도 서버가 곧 정리)
+    window.addEventListener('pagehide', () => {
+        try { if (window.firebase && FB_ROOM && firebase.apps.length) firebase.database().ref('rooms/' + FB_ROOM + '/viewers/' + FB_VID).remove(); } catch (e) {}
+    });
 </script>
 </body>
 </html>
