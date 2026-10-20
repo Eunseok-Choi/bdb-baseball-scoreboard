@@ -214,10 +214,15 @@
 </div>
 
 <script>
-    // ?id=... 로 다른 뷰어(예: 가로형 테스트)를 지정 가능. 기본값은 기존 뷰어.
-    const TARGET_ID = new URLSearchParams(location.search).get('id') || 'jiho-papa-live-viewer';
+    // 접속 대상 뷰어 ID 목록(세로형 기본 + 가로형). 컨트롤러는 목록 전체에 동시에 접속하고, 연결된 모든 뷰어에 전송.
+    // → 어느 오버레이가 켜져 있든(둘 다든) 알아서 처리. 주소의 ?id=a,b 로 목록을 덮어쓸 수 있음.
+    const DEFAULT_TARGET_IDS = ['jiho-papa-live-viewer', 'jiho-papa-live-viewer-h'];
+    const _qid = new URLSearchParams(location.search).get('id');
+    const TARGET_IDS = (_qid ? _qid.split(',').map(s => s.trim()).filter(Boolean) : []).length
+        ? _qid.split(',').map(s => s.trim()).filter(Boolean) : DEFAULT_TARGET_IDS;
+    // 뷰어별 연결 상태
+    const links = TARGET_IDS.map(id => ({ id, conn: null, connStart: 0, iceDiscSince: 0, lastRx: 0, viewerPong: false, lastActionProbe: 0, nextTry: 0 }));
     let peer = null;
-    let conn = null;
 
     const PLAYER_DB_KEY = 'bb_players_master';
     const DEFAULT_PLAYERS = {
@@ -254,58 +259,63 @@
     let currentMainTab = 'score';
 
     const PENDING_MS = 15000;   // 협상 중(아직 안 열린) 연결은 이 시간 동안 끊지 않고 기다림
-    let connStart = 0;
-    let iceDiscSince = 0;
+    const ABSENT_RETRY_MS = 5000;   // 뷰어가 아직 없음(peer-unavailable)이면 이 간격으로만 재시도
     let peerRestartTimer = null;
 
     // ── 뷰어(방송앱) 생존 확인: ping/pong. 뷰어가 pong을 지원할 때만(구버전 호환) 강제 판정에 사용 ──
-    let lastRx = 0;            // 뷰어로부터 마지막 수신 시각(pong/sync 포함)
-    let viewerPong = false;    // 뷰어가 pong 응답을 지원하는지(첫 pong 수신 시 true)
-    let lastActionProbe = 0;
+    // 상태(lastRx/viewerPong/...)는 뷰어별(links[i])로 관리.
+    function openLinks() { return links.filter(l => l.conn && l.conn.open); }
 
+    // 열려 있는 모든 뷰어에 전송. 하나라도 보냈으면 true.
     function rawSend(obj) {
-        try { if (conn && conn.open) { conn.send(obj); return true; } } catch (e) {}
-        return false;
+        let ok = false;
+        links.forEach(l => { try { if (l.conn && l.conn.open) { l.conn.send(obj); ok = true; } } catch (e) {} });
+        return ok;
     }
+    function sendTo(l, obj) { try { if (l.conn && l.conn.open) l.conn.send(obj); } catch (e) {} }
 
     function setLinkStatus(ok, msg) {
         const el = document.getElementById('status');
         if (!el) return;
         const btn = "<button onclick='initConn(true)' style='padding:2px 5px; font-size:10px; background:#444; border:none; color:white; border-radius:4px;'>🔄</button>";
         if (ok) {
-            el.innerHTML = "✅ 방송 연결됨 " + btn;
+            const cnt = links.length > 1 ? " (" + openLinks().length + "/" + links.length + ")" : "";
+            el.innerHTML = "✅ 방송 연결됨" + cnt + " " + btn;
             el.style.color = "#32D74B";
         } else {
             el.innerHTML = "🟠 " + (msg || "방송 앱에 연결 중…") + " " + btn;
             el.style.color = "#FF9F0A";
         }
     }
+    // 하나라도 열려 있으면 '연결됨', 아니면 msg 표시
+    function refreshStatus(msg) { if (openLinks().length) setLinkStatus(true); else setLinkStatus(false, msg); }
 
-    // 조작 직후 헬스체크: 뷰어가 pong을 지원하면 1.5초 안에 응답이 없을 때 즉시 재접속
+    // 조작 직후 헬스체크: 뷰어가 pong을 지원하면 1.5초 안에 응답이 없을 때 해당 뷰어만 즉시 재접속
     // (재접속되면 open에서 syncAll → 누락된 조작도 최신 상태로 다시 전달됨)
-    function probeOnAction() {
-        if (!viewerPong || !conn || !conn.open) return;
+    function probeLink(l) {
+        if (!l.viewerPong || !l.conn || !l.conn.open) return;
         const now = Date.now();
-        if (now - lastActionProbe < 3000) return;
-        lastActionProbe = now;
-        rawSend({ req: 'ping' });
+        if (now - l.lastActionProbe < 3000) return;
+        l.lastActionProbe = now;
+        sendTo(l, { req: 'ping' });
         setTimeout(() => {
-            if (lastRx < now) { setLinkStatus(false, '응답 없음 — 재연결 중…'); initConn(true); }
+            if (l.lastRx < now) { connectLink(l, true); refreshStatus('응답 없음 — 재연결 중…'); }
         }, 1500);
     }
+    function probeOnAction() { links.forEach(probeLink); }
 
     // WebRTC 상태로 '열려 있지만 사실상 죽은' 연결 감지(백그라운드 복귀 직후 등)
-    function iceDead(c) {
+    function iceDead(l) {
         try {
-            const pc = c && c.peerConnection;
+            const pc = l.conn && l.conn.peerConnection;
             if (!pc) return false;
             const s = pc.iceConnectionState;
             if (s === 'failed' || s === 'closed') return true;
             if (s === 'disconnected') {
-                if (!iceDiscSince) iceDiscSince = Date.now();
-                return Date.now() - iceDiscSince > 5000;
+                if (!l.iceDiscSince) l.iceDiscSince = Date.now();
+                return Date.now() - l.iceDiscSince > 5000;
             }
-            iceDiscSince = 0;
+            l.iceDiscSince = 0;
         } catch (e) {}
         return false;
     }
@@ -316,28 +326,36 @@
         if (peer.destroyed) { restartPeer(); return; }
         if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} return; }
         if (!peer.open) return;   // 시그널링 등록 대기
+        links.forEach(l => connectLink(l, force === true));
+    }
+
+    // 뷰어 하나에 접속(이미 협상 중이면 기다리고, 없는 뷰어는 천천히 재시도)
+    function connectLink(l, force) {
+        if (!peer || !peer.open) return;
         // 협상 중인 연결을 2초마다 끊고 새로 시작하면(느린 ICE/TURN) 영영 못 붙으므로 일정 시간 기다림. 수동 🔄는 force.
-        if (force !== true && conn && !conn.open && Date.now() - connStart < PENDING_MS) return;
-        try { if (conn) conn.close(); } catch (e) {}
-        iceDiscSince = 0;
-        connStart = Date.now();
-        const c = peer.connect(TARGET_ID);
-        conn = c;
-        setLinkStatus(false, '방송 앱에 연결 중…');
+        if (force !== true && l.conn && !l.conn.open && Date.now() - l.connStart < PENDING_MS) return;
+        if (force !== true && Date.now() < l.nextTry) return;   // 아직 없는 뷰어는 5초 간격으로만
+        try { if (l.conn) l.conn.close(); } catch (e) {}
+        l.iceDiscSince = 0;
+        l.connStart = Date.now();
+        const c = peer.connect(l.id);
+        l.conn = c;
+        refreshStatus('방송 앱에 연결 중…');
         c.on('open', () => {
-            if (conn !== c) return;
-            lastRx = Date.now();
-            setLinkStatus(true);
-            syncAll();
+            if (l.conn !== c) return;
+            l.lastRx = Date.now();
+            l.nextTry = 0;
+            refreshStatus();
+            syncAll();   // 열려 있는 모든 뷰어에 현재 상태 전송(새로 열린 뷰어 포함)
         });
         // 🔄 뷰어(방송앱)가 reload 후 재접속하면 "현재 상태 줘"라고 요청 → 즉시 전체 동기화 응답.
         c.on('data', (d) => {
-            lastRx = Date.now();
-            if (d && d.req === 'pong') { viewerPong = true; return; }
+            l.lastRx = Date.now();
+            if (d && d.req === 'pong') { l.viewerPong = true; return; }
             if (d && d.req === 'sync') syncAll();
         });
         // 끝난 연결은 비워서 다음 시도가 '대기 중' 가드에 막히지 않게 함
-        const lost = () => { if (conn === c) { conn = null; setLinkStatus(false, '연결 끊김 — 재연결 중…'); } };
+        const lost = () => { if (l.conn === c) { l.conn = null; refreshStatus('연결 끊김 — 재연결 중…'); } };
         c.on('close', lost);
         c.on('error', lost);
     }
@@ -349,8 +367,16 @@
         p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
         p.on('error', (err) => {
             if (p !== peer) return;   // 교체된 이전 피어의 에러는 무시
-            // 뷰어가 아직 없음 → 피어 유지, 다음 주기(2초)에 다시 시도
-            if (err && err.type === 'peer-unavailable') { conn = null; return; }
+            // 뷰어가 아직 없음(해당 오버레이가 꺼져 있거나 로딩 전) → 피어 유지, 그 뷰어만 5초 뒤 재시도
+            if (err && err.type === 'peer-unavailable') {
+                const msg = String(err.message || '');
+                const hit = links.filter(l => msg.indexOf(l.id) >= 0);
+                (hit.length ? hit : links.filter(l => !(l.conn && l.conn.open))).forEach(l => {
+                    if (!(l.conn && l.conn.open)) { l.conn = null; l.nextTry = Date.now() + ABSENT_RETRY_MS; }
+                });
+                refreshStatus('방송 앱 대기 중…');
+                return;
+            }
             restartPeer();
         });
     }
@@ -360,7 +386,7 @@
         peerRestartTimer = setTimeout(() => {
             peerRestartTimer = null;
             try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
-            conn = null;
+            links.forEach(l => { l.conn = null; l.nextTry = 0; });
             startPeer();
         }, 1000);
     }
@@ -368,8 +394,11 @@
     // 백그라운드 복귀: 즉시 점검, 열린 연결은 죽었는지 확인해 빠르게 재접속
     function onResume() {
         if (!peer) return;
-        if (conn && conn.open && iceDead(conn)) { initConn(true); return; }
-        if (!conn || !conn.open) initConn();
+        if (!peer.open) { initConn(); return; }
+        links.forEach(l => {
+            if (l.conn && l.conn.open && iceDead(l)) connectLink(l, true);
+            else if (!l.conn || !l.conn.open) { l.nextTry = 0; connectLink(l, false); }
+        });
     }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) onResume(); });
     window.addEventListener('online', onResume);
@@ -547,7 +576,7 @@
     }
 
     function sendLineupData() {
-        if(!conn || !conn.open) { initConn(); return; }
+        if (!openLinks().length) { initConn(); return; }
         const curL = lineupState[scoreState.currentClass];
         let html = "";
         if(scoreState.gameMode === 'offense') {
@@ -571,12 +600,15 @@
         startPeer();
         // 끊김 감지 재접속(2초 주기) — viewer reload 후 빠르게 복구. 열려 있어도 WebRTC가 죽었으면 재접속.
         setInterval(() => {
-            if (!conn || !conn.open) { initConn(); return; }
-            rawSend({ req: 'ping' });   // 뷰어가 pong 지원 시 생존 확인(구버전 뷰어는 req 메시지를 무시)
-            if (iceDead(conn) || (viewerPong && Date.now() - lastRx > 7000)) {
-                setLinkStatus(false, '연결 불안정 — 재연결 중…');
-                initConn(true);
-            }
+            if (!peer || !peer.open) { initConn(); return; }
+            links.forEach(l => {
+                if (!l.conn || !l.conn.open) { connectLink(l, false); return; }
+                sendTo(l, { req: 'ping' });   // 뷰어가 pong 지원 시 생존 확인(구버전 뷰어는 req 메시지를 무시)
+                if (iceDead(l) || (l.viewerPong && Date.now() - l.lastRx > 7000)) {
+                    refreshStatus('연결 불안정 — 재연결 중…');
+                    connectLink(l, true);
+                }
+            });
         }, 2000);
         // 상태 하트비트(5초) — 패킷 누락/재접속 직후에도 최신 상태가 곧 반영되도록 안전망.
         setInterval(() => { if (rawSend(scoreState)) sendLineupData(); }, 5000);
