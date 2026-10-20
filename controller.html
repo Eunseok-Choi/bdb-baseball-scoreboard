@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>통합 야구 컨트롤러 - 최종본</title>
-    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+    <script src="fb-config.js"></script>
     <style>
         * { box-sizing: border-box; }
         body { font-family: -apple-system, sans-serif; background: #121212; color: white; margin: 0; padding: 10px; touch-action: manipulation; }
@@ -214,15 +216,10 @@
 </div>
 
 <script>
-    // 접속 대상 뷰어 ID 목록(세로형 기본 + 가로형). 컨트롤러는 목록 전체에 동시에 접속하고, 연결된 모든 뷰어에 전송.
-    // → 어느 오버레이가 켜져 있든(둘 다든) 알아서 처리. 주소의 ?id=a,b 로 목록을 덮어쓸 수 있음.
-    const DEFAULT_TARGET_IDS = ['jiho-papa-live-viewer', 'jiho-papa-live-viewer-h'];
-    const _qid = new URLSearchParams(location.search).get('id');
-    const TARGET_IDS = (_qid ? _qid.split(',').map(s => s.trim()).filter(Boolean) : []).length
-        ? _qid.split(',').map(s => s.trim()).filter(Boolean) : DEFAULT_TARGET_IDS;
-    // 뷰어별 연결 상태
-    const links = TARGET_IDS.map(id => ({ id, conn: null, connStart: 0, iceDiscSince: 0, lastRx: 0, viewerPong: false, lastActionProbe: 0, nextTry: 0 }));
-    let peer = null;
+    // 방 코드: 주소의 ?room=... 로 지정(처음 한 번 이 브라우저에 저장되어 다음부터는 생략 가능).
+    // 방송 앱의 스코어보드 뷰어(세로형/가로형 모두)가 같은 방을 구독한다.
+    let FB_ROOM = new URLSearchParams(location.search).get('room') || '';
+    try { if (FB_ROOM) localStorage.setItem('fb_room', FB_ROOM); else FB_ROOM = localStorage.getItem('fb_room') || ''; } catch (e) {}
 
     const PLAYER_DB_KEY = 'bb_players_master';
     const DEFAULT_PLAYERS = {
@@ -238,6 +235,8 @@
     const SCORE_KEY = 'bb_score_' + dateStr;
     const LINEUP_KEY = 'bb_lineup_' + dateStr;
 
+    // 이 브라우저에 오늘 저장된 상태가 없으면(새 기기/새 날짜) 첫 연결 때 서버의 오늘 상태를 이어받음(점수 덮어쓰기 방지)
+    const freshLocalScore = localStorage.getItem(SCORE_KEY) === null;
     let scoreState = JSON.parse(localStorage.getItem(SCORE_KEY)) || {
         nameA: '빅드림', nameB: '상대팀', scoreA: 0, scoreB: 0, inning: 1, isTop: true,
         base1: false, base2: false, base3: false, b: 0, s: 0, o: 0,
@@ -258,148 +257,92 @@
 
     let currentMainTab = 'score';
 
-    const PENDING_MS = 15000;   // 협상 중(아직 안 열린) 연결은 이 시간 동안 끊지 않고 기다림
-    const ABSENT_RETRY_MS = 5000;   // 뷰어가 아직 없음(peer-unavailable)이면 이 간격으로만 재시도
-    let peerRestartTimer = null;
+    // ── Firebase Realtime Database (PeerJS 대체) ───────────────────────────────────
+    // 컨트롤러는 rooms/{room}/score(전체 상태)와 rooms/{room}/lineup(라인업 HTML)에 '쓰기'만 한다.
+    // 서버가 값을 보관하고, 방송 앱의 뷰어(세로형/가로형 모두)가 그 값을 구독한다 →
+    // 뷰어를 새로고침/재시작해도 접속 즉시 최신 상태를 받으므로 '연결 수립·재동기화 요청·ID 충돌'이 없다.
+    // 쓰기는 오프라인이어도 큐에 쌓였다가 연결되면 자동 전송된다. 끊김/재연결은 Firebase SDK가 자동 처리.
+    let fbDb = null, fbBase = null;
+    let fbConnected = false;
+    let fbViewers = {};          // 현재 접속 중인 뷰어들(rooms/{room}/viewers)
+    let fbFirstSync = true;
 
-    // ── 뷰어(방송앱) 생존 확인: ping/pong. 뷰어가 pong을 지원할 때만(구버전 호환) 강제 판정에 사용 ──
-    // 상태(lastRx/viewerPong/...)는 뷰어별(links[i])로 관리.
-    function openLinks() { return links.filter(l => l.conn && l.conn.open); }
+    function viewerCount() { return Object.keys(fbViewers || {}).length; }
 
-    // 열려 있는 모든 뷰어에 전송. 하나라도 보냈으면 true.
-    function rawSend(obj) {
-        let ok = false;
-        links.forEach(l => { try { if (l.conn && l.conn.open) { l.conn.send(obj); ok = true; } } catch (e) {} });
-        return ok;
-    }
-    function sendTo(l, obj) { try { if (l.conn && l.conn.open) l.conn.send(obj); } catch (e) {} }
-
-    function setLinkStatus(ok, msg) {
+    function setLinkStatus(ok, msg, n) {
         const el = document.getElementById('status');
         if (!el) return;
-        const btn = "<button onclick='initConn(true)' style='padding:2px 5px; font-size:10px; background:#444; border:none; color:white; border-radius:4px;'>🔄</button>";
+        const btn = "<button onclick='reconnectRealtime()' style='padding:2px 5px; font-size:10px; background:#444; border:none; color:white; border-radius:4px;'>🔄</button>";
         if (ok) {
-            const cnt = links.length > 1 ? " (" + openLinks().length + "/" + links.length + ")" : "";
-            el.innerHTML = "✅ 방송 연결됨" + cnt + " " + btn;
+            el.innerHTML = "✅ 방송 연결됨 (앱 " + n + "개) " + btn;
             el.style.color = "#32D74B";
         } else {
-            el.innerHTML = "🟠 " + (msg || "방송 앱에 연결 중…") + " " + btn;
+            el.innerHTML = "🟠 " + (msg || "서버에 연결 중…") + " " + btn;
             el.style.color = "#FF9F0A";
         }
     }
-    // 하나라도 열려 있으면 '연결됨', 아니면 msg 표시
-    function refreshStatus(msg) { if (openLinks().length) setLinkStatus(true); else setLinkStatus(false, msg); }
-
-    // 조작 직후 헬스체크: 뷰어가 pong을 지원하면 1.5초 안에 응답이 없을 때 해당 뷰어만 즉시 재접속
-    // (재접속되면 open에서 syncAll → 누락된 조작도 최신 상태로 다시 전달됨)
-    function probeLink(l) {
-        if (!l.viewerPong || !l.conn || !l.conn.open) return;
-        const now = Date.now();
-        if (now - l.lastActionProbe < 3000) return;
-        l.lastActionProbe = now;
-        sendTo(l, { req: 'ping' });
-        setTimeout(() => {
-            if (l.lastRx < now) { connectLink(l, true); refreshStatus('응답 없음 — 재연결 중…'); }
-        }, 1500);
+    function refreshStatus() {
+        if (!FB_ROOM) { setLinkStatus(false, '방 코드가 없어요 (주소 끝에 ?room=방코드)'); return; }
+        if (!fbDb) { setLinkStatus(false, 'Firebase를 불러오지 못했어요 (설정/네트워크 확인)'); return; }
+        if (!fbConnected) { setLinkStatus(false, '서버에 연결 중…'); return; }
+        const n = viewerCount();
+        if (n > 0) setLinkStatus(true, null, n);
+        else setLinkStatus(false, '서버 연결됨 · 방송 앱 대기 중 (켜면 자동 반영)');
     }
-    function probeOnAction() { links.forEach(probeLink); }
 
-    // WebRTC 상태로 '열려 있지만 사실상 죽은' 연결 감지(백그라운드 복귀 직후 등)
-    function iceDead(l) {
+    // 현재 점수 상태/라인업을 서버에 기록(뷰어들이 즉시 수신)
+    function pushScore() {
+        if (!fbBase) return false;
+        try { fbBase.child('score').set(JSON.parse(JSON.stringify(scoreState))); return true; } catch (e) { return false; }
+    }
+    function pushLineup(html) {
+        if (!fbBase) return false;
+        try { fbBase.child('lineup').set({ html: html, t: firebase.database.ServerValue.TIMESTAMP }); return true; } catch (e) { return false; }
+    }
+
+    // 첫 연결: 이 브라우저에 오늘 상태가 없으면(새 기기/새 날짜) 서버의 오늘 상태를 이어받고, 아니면 로컬 상태를 서버에 올림
+    function onFirstConnect() {
+        if (!fbFirstSync) return;
+        fbFirstSync = false;
+        if (!freshLocalScore) { syncAll(); return; }
+        fbBase.child('score').once('value').then(s => {
+            const v = s.val();
+            if (v && v.dateStr === dateStr) {
+                Object.assign(scoreState, v);
+                localStorage.setItem(SCORE_KEY, JSON.stringify(scoreState));
+                updateScoreUI();
+            } else syncAll();
+        }).catch(() => syncAll());
+    }
+
+    function startRealtime() {
         try {
-            const pc = l.conn && l.conn.peerConnection;
-            if (!pc) return false;
-            const s = pc.iceConnectionState;
-            if (s === 'failed' || s === 'closed') return true;
-            if (s === 'disconnected') {
-                if (!l.iceDiscSince) l.iceDiscSince = Date.now();
-                return Date.now() - l.iceDiscSince > 5000;
+            if (!FB_ROOM) {
+                const r = (typeof prompt === 'function') ? prompt('방 코드를 입력하세요 (주소의 ?room= 값)') : '';
+                if (r) { FB_ROOM = r.trim(); try { localStorage.setItem('fb_room', FB_ROOM); } catch (e) {} }
             }
-            l.iceDiscSince = 0;
-        } catch (e) {}
-        return false;
+            if (!FB_ROOM || typeof firebase === 'undefined' || !window.FB_CONFIG) { refreshStatus(); return; }
+            if (!firebase.apps.length) firebase.initializeApp(window.FB_CONFIG);
+            fbDb = firebase.database();
+            fbBase = fbDb.ref('rooms/' + FB_ROOM);
+            fbDb.ref('.info/connected').on('value', s => {
+                fbConnected = s.val() === true;
+                refreshStatus();
+                if (fbConnected) onFirstConnect();
+            });
+            fbBase.child('viewers').on('value', s => { fbViewers = s.val() || {}; refreshStatus(); });
+        } catch (e) { fbDb = null; fbBase = null; refreshStatus(); }
+        refreshStatus();
     }
 
-    function initConn(force) {
-        // 피어가 죽었으면 새로 만들고(open 이벤트에서 다시 initConn), 시그널링이 끊겼으면 재접속만.
-        if (!peer) return;   // 아직 컨트롤러 시작 전(암호 게이트 등)
-        if (peer.destroyed) { restartPeer(); return; }
-        if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} return; }
-        if (!peer.open) return;   // 시그널링 등록 대기
-        links.forEach(l => connectLink(l, force === true));
+    // 🔄 버튼: 서버 연결을 한 번 껐다 켬
+    function reconnectRealtime() {
+        try { if (fbDb) { fbDb.goOffline(); setTimeout(() => { try { fbDb.goOnline(); } catch (e) {} }, 300); } } catch (e) {}
+        refreshStatus();
     }
 
-    // 뷰어 하나에 접속(이미 협상 중이면 기다리고, 없는 뷰어는 천천히 재시도)
-    function connectLink(l, force) {
-        if (!peer || !peer.open) return;
-        // 협상 중인 연결을 2초마다 끊고 새로 시작하면(느린 ICE/TURN) 영영 못 붙으므로 일정 시간 기다림. 수동 🔄는 force.
-        if (force !== true && l.conn && !l.conn.open && Date.now() - l.connStart < PENDING_MS) return;
-        if (force !== true && Date.now() < l.nextTry) return;   // 아직 없는 뷰어는 5초 간격으로만
-        try { if (l.conn) l.conn.close(); } catch (e) {}
-        l.iceDiscSince = 0;
-        l.connStart = Date.now();
-        const c = peer.connect(l.id);
-        l.conn = c;
-        refreshStatus('방송 앱에 연결 중…');
-        c.on('open', () => {
-            if (l.conn !== c) return;
-            l.lastRx = Date.now();
-            l.nextTry = 0;
-            refreshStatus();
-            syncAll();   // 열려 있는 모든 뷰어에 현재 상태 전송(새로 열린 뷰어 포함)
-        });
-        // 🔄 뷰어(방송앱)가 reload 후 재접속하면 "현재 상태 줘"라고 요청 → 즉시 전체 동기화 응답.
-        c.on('data', (d) => {
-            l.lastRx = Date.now();
-            if (d && d.req === 'pong') { l.viewerPong = true; return; }
-            if (d && d.req === 'sync') syncAll();
-        });
-        // 끝난 연결은 비워서 다음 시도가 '대기 중' 가드에 막히지 않게 함
-        const lost = () => { if (l.conn === c) { l.conn = null; refreshStatus('연결 끊김 — 재연결 중…'); } };
-        c.on('close', lost);
-        c.on('error', lost);
-    }
-
-    function startPeer() {
-        const p = new Peer();
-        peer = p;
-        p.on('open', () => { if (p === peer) initConn(true); });
-        p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
-        p.on('error', (err) => {
-            if (p !== peer) return;   // 교체된 이전 피어의 에러는 무시
-            // 뷰어가 아직 없음(해당 오버레이가 꺼져 있거나 로딩 전) → 피어 유지, 그 뷰어만 5초 뒤 재시도
-            if (err && err.type === 'peer-unavailable') {
-                const msg = String(err.message || '');
-                const hit = links.filter(l => msg.indexOf(l.id) >= 0);
-                (hit.length ? hit : links.filter(l => !(l.conn && l.conn.open))).forEach(l => {
-                    if (!(l.conn && l.conn.open)) { l.conn = null; l.nextTry = Date.now() + ABSENT_RETRY_MS; }
-                });
-                refreshStatus('방송 앱 대기 중…');
-                return;
-            }
-            restartPeer();
-        });
-    }
-
-    function restartPeer() {
-        if (peerRestartTimer) return;
-        peerRestartTimer = setTimeout(() => {
-            peerRestartTimer = null;
-            try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
-            links.forEach(l => { l.conn = null; l.nextTry = 0; });
-            startPeer();
-        }, 1000);
-    }
-
-    // 백그라운드 복귀: 즉시 점검, 열린 연결은 죽었는지 확인해 빠르게 재접속
-    function onResume() {
-        if (!peer) return;
-        if (!peer.open) { initConn(); return; }
-        links.forEach(l => {
-            if (l.conn && l.conn.open && iceDead(l)) connectLink(l, true);
-            else if (!l.conn || !l.conn.open) { l.nextTry = 0; connectLink(l, false); }
-        });
-    }
+    // 백그라운드 복귀/네트워크 복구: 연결을 즉시 깨워 줌(자동 재접속을 앞당김)
+    function onResume() { try { if (fbDb) fbDb.goOnline(); } catch (e) {} refreshStatus(); }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) onResume(); });
     window.addEventListener('online', onResume);
     window.addEventListener('pageshow', onResume);
@@ -455,11 +398,10 @@
         scoreState.logoB = document.getElementById('logoB').value.trim();
         localStorage.setItem('bb_logo_a', scoreState.logoA);
         localStorage.setItem('bb_logo_b', scoreState.logoB);
+        scoreState.dateStr = dateStr;   // 새 기기/새 날짜 판별용(첫 연결 때 서버 상태 이어받기)
         localStorage.setItem(SCORE_KEY, JSON.stringify(scoreState));
         updateScoreUI();
-        // 연결이 열려 있으면 전송 + 헬스체크, 아니면 즉시 재접속 시도(open 시 전체 상태가 재전송됨)
-        if (rawSend(scoreState)) probeOnAction();
-        else initConn();
+        pushScore();   // 서버에 기록 → 방송 앱 뷰어가 즉시 수신(오프라인이면 큐에 쌓였다가 연결 시 전송)
     }
 
     function updateScoreUI() {
@@ -576,7 +518,6 @@
     }
 
     function sendLineupData() {
-        if (!openLinks().length) { initConn(); return; }
         const curL = lineupState[scoreState.currentClass];
         let html = "";
         if(scoreState.gameMode === 'offense') {
@@ -585,7 +526,7 @@
         } else {
             html = `<div style="display:flex; justify-content:space-between; width:100%;"><span>P. ${curL.pName}</span><span>⚾️ ${curL.pCount}</span></div>`;
         }
-        rawSend({ html });
+        pushLineup(html);
     }
 
     function syncAll() { updateScoreState(); sendLineupData(); }
@@ -597,21 +538,7 @@
     }
 
     function startController() {
-        startPeer();
-        // 끊김 감지 재접속(2초 주기) — viewer reload 후 빠르게 복구. 열려 있어도 WebRTC가 죽었으면 재접속.
-        setInterval(() => {
-            if (!peer || !peer.open) { initConn(); return; }
-            links.forEach(l => {
-                if (!l.conn || !l.conn.open) { connectLink(l, false); return; }
-                sendTo(l, { req: 'ping' });   // 뷰어가 pong 지원 시 생존 확인(구버전 뷰어는 req 메시지를 무시)
-                if (iceDead(l) || (l.viewerPong && Date.now() - l.lastRx > 7000)) {
-                    refreshStatus('연결 불안정 — 재연결 중…');
-                    connectLink(l, true);
-                }
-            });
-        }, 2000);
-        // 상태 하트비트(5초) — 패킷 누락/재접속 직후에도 최신 상태가 곧 반영되도록 안전망.
-        setInterval(() => { if (rawSend(scoreState)) sendLineupData(); }, 5000);
+        startRealtime();   // Firebase 연결(끊김/재연결은 SDK가 자동 처리 — 2초 점검/5초 하트비트 불필요)
         setMainTab('score');
     }
 
