@@ -215,6 +215,9 @@
         try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
     }
     window.addEventListener('pagehide', cleanupPeer);
+    // 앱(안드로이드)이 주기적으로 호출하는 상태 점검: PeerJS 서버에 ID가 등록되어 있고 끊기지 않았으면 true.
+    // 오래 false면 앱이 이 오버레이를 새로고침해 연결을 복구함.
+    window.bdbHealth = function () { return !!(peer && peer.open && !peer.disconnected && !peer.destroyed); };
     window.addEventListener('beforeunload', cleanupPeer);
 
     // 🕵️ 좀비 와치독 (5초마다 생존 확인)
