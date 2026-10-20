@@ -10,7 +10,7 @@
         :root { --scale-factor: 0.55; }
         body { margin: 0; background: transparent; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; }
         .master-container {
-            width: 360px; margin: 10px; display: flex; flex-direction: column; gap: 8px;
+            width: 360px; margin: 0; display: flex; flex-direction: column; gap: 8px;
             transform: scale(var(--scale-factor)); transform-origin: top left;
         }
         .scoreboard { background: rgba(0, 0, 0, 0.92); padding: 12px; border: 1px solid #444; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.5); }
@@ -40,7 +40,7 @@
 </head>
 <body>
 <div class="master-container">
-    <div class="title-bar" id="game-title" style="visibility:hidden;">&nbsp;</div>
+    <div class="title-bar" id="game-title" style="display:none;"></div>
     <div class="scoreboard">
         <div class="score-row">
             <div class="team-box" id="name-a">빅드림</div>
@@ -97,7 +97,10 @@
         const gt = document.getElementById('game-title');
         // 칸은 항상 자리를 차지(비어 있으면 투명) → 앱이 측정한 오버레이 크기가 대회명 유무와 무관하게 일정(하단 잘림 방지)
         gt.textContent = state.title || '\u00A0';
-        gt.style.visibility = state.title ? 'visible' : 'hidden';
+        // 대회명이 없으면 칸을 숨겨 위쪽 여백 제거(박스가 내용에 딱 맞음). 있다/없다가 바뀌면 document.title로 앱에 알려 재측정(하단 잘림 방지).
+        const hadTitle = gt.style.display !== 'none';
+        gt.style.display = state.title ? 'block' : 'none';
+        if (hadTitle !== !!state.title) document.title = 'resize:' + Date.now();
     }
 
     function escapeHtml(t) {
