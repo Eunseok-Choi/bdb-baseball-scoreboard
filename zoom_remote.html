@@ -4,7 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>줌 리모컨</title>
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="fb-config.js"></script>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
   body { margin: 0; background: #121212; color: #fff; font-family: -apple-system, 'Noto Sans KR', sans-serif; padding: 16px; max-width: 480px; margin: 0 auto; }
@@ -54,13 +56,17 @@
   <div id="diag"></div>
 
 <script>
-const TARGET_ID = 'jjremote';           // 폰 앱(zoom_receiver.html)의 고정 PeerJS ID
+// 방 코드: 주소의 ?room=... 로 지정(처음 한 번 저장되어 다음부터는 생략 가능). 앱의 줌 수신기와 같은 방을 써야 연결됨.
 const STEP = 0.1;                       // 누르고 있는 동안 한 번에 변하는 배율
 const REPEAT_MS = 120;                  // 반복 전송 간격
 const DEFAULT_PRESETS = [1, 2, 3, 5, 8, 10];   // ← 프리셋 기본값(웹에서 정의, 앱 설정보다 우선)
 const LS_KEY = 'zoom_presets_v1';
 
-let peer = null, conn = null;
+let ROOM = new URLSearchParams(location.search).get('room') || '';
+try { if (ROOM) localStorage.setItem('fb_room', ROOM); else ROOM = localStorage.getItem('fb_room') || ''; } catch (e) {}
+
+let db = null, base = null;
+let dbConnected = false, recvOnline = false;
 let status = { zoom: 1, max: 20, min: 1, canZoom: true };
 let presets = loadPresets();
 
@@ -70,14 +76,21 @@ function loadPresets() {
 }
 function savePresets() { try { localStorage.setItem(LS_KEY, JSON.stringify(presets)); } catch (e) {} }
 
-function setConn(ok) {
-    const el = document.getElementById('conn');
-    el.textContent = ok ? '연결됨' : '연결 중…';
-    el.className = ok ? 'ok' : '';
-}
 function say(t) { document.getElementById('msg').textContent = t || ''; }
-// 연결 진단 문구(안 붙을 때 어느 쪽 문제인지 보이게)
 function setDiag(t) { document.getElementById('diag').textContent = t || ''; }
+
+// 상태 표시: 서버 연결 + 폰(앱) 수신기 온라인 여부
+function refreshConn() {
+    const el = document.getElementById('conn');
+    if (!ROOM) { el.textContent = '방 코드 없음'; el.className = ''; setDiag('주소 끝에 ?room=방코드 를 붙여 여세요'); return; }
+    if (!dbConnected) { el.textContent = '서버 연결 중…'; el.className = ''; setDiag('서버에 연결 중… (자동 재시도)'); return; }
+    if (!recvOnline) {
+        el.textContent = '폰 대기 중'; el.className = '';
+        setDiag('서버 연결됨 — 폰(앱)이 방송 중이고 "원격 줌 허용"이 켜져 있는지 확인하세요');
+        return;
+    }
+    el.textContent = '연결됨'; el.className = 'ok'; setDiag('');
+}
 
 function render() {
     document.getElementById('zoomVal').textContent = status.zoom.toFixed(1) + 'x';
@@ -99,113 +112,47 @@ function render() {
     });
 }
 
-function send(msg) { try { if (conn && conn.open) conn.send(msg); } catch (e) {} }
-
-// ── 연결 관리: 시그널링 피어(peer)는 최대한 유지하고, 폰으로의 데이터 연결(conn)만 빠르게 재시도 ──
-let lastRx = 0;          // 폰에서 마지막으로 받은 시각(하트비트 응답 포함)
-let lastAttempt = 0;     // 마지막 conn 시도 시각
-let retryTimer = null;
-
-function scheduleOpen(ms) {
-    if (retryTimer) return;
-    retryTimer = setTimeout(() => { retryTimer = null; openConn(); }, ms);
-}
-
-const PENDING_MS = 15000;   // 협상 중(아직 안 열린) 연결은 이 시간 동안 끊지 않고 기다림
-let retryPeer = null;
-let iceDiscSince = 0;
-
-// WebRTC 상태로 '열려 있지만 사실상 죽은' 연결 감지(백그라운드 복귀 직후 등)
-function iceDead(c) {
+// 명령 전송: rooms/{room}/zoom/cmds 에 추가(앱 수신기가 즉시 받아 처리·삭제). 서버 시각을 같이 기록해 오래된 명령은 앱이 무시.
+function send(msg) {
+    if (!base) return;
     try {
-        const pc = c && c.peerConnection;
-        if (!pc) return false;
-        const s = pc.iceConnectionState;
-        if (s === 'failed' || s === 'closed') return true;
-        if (s === 'disconnected') {
-            if (!iceDiscSince) iceDiscSince = Date.now();
-            return Date.now() - iceDiscSince > 5000;
-        }
-        iceDiscSince = 0;
+        const m = Object.assign({}, msg, { t: firebase.database.ServerValue.TIMESTAMP });
+        base.child('cmds').push(m);
     } catch (e) {}
-    return false;
 }
 
-function openConn(force) {
-    if (!peer || peer.destroyed || !peer.open) return;
-    // 협상 중인 연결을 너무 일찍 끊고 새로 시작하면(느린 ICE/TURN) 영영 못 붙을 수 있어 일정 시간 기다림
-    if (!force && conn && !conn.open && Date.now() - lastAttempt < PENDING_MS) return;
-    lastAttempt = Date.now();
-    try { if (conn) { const old = conn; conn = null; old.close(); } } catch (e) {}
-    iceDiscSince = 0;
-    const c = peer.connect(TARGET_ID, { reliable: true });
-    conn = c;
-    c.on('open', () => { lastRx = Date.now(); setConn(true); setDiag(''); send({ type: 'status' }); });
-    c.on('data', d => {
-        lastRx = Date.now();
-        if (d && d.type === 'status') { status = { zoom: +d.zoom, max: +d.max, min: (+d.min > 0 ? +d.min : 1), canZoom: !!d.canZoom }; render(); }
-    });
-    // 끝난 연결은 비워서(conn=null) 다음 시도가 '대기 중' 가드에 막히지 않게 함
-    const lost = () => { if (conn === c) { conn = null; setConn(false); setDiag('연결이 끊겼어요 — 다시 연결 중…'); scheduleOpen(800); } };
-    c.on('close', lost);
-    c.on('error', lost);
+function start() {
+    refreshConn();
+    if (typeof firebase === 'undefined' || !window.FB_CONFIG) { setDiag('Firebase를 불러오지 못했어요 — 네트워크/설정(fb-config.js) 확인'); return; }
+    if (!ROOM) return;
+    try {
+        if (!firebase.apps.length) firebase.initializeApp(window.FB_CONFIG);
+        db = firebase.database();
+        base = db.ref('rooms/' + ROOM + '/zoom');
+        db.ref('.info/connected').on('value', s => { dbConnected = s.val() === true; refreshConn(); });
+        base.child('receiver').on('value', s => { recvOnline = s.val() === true; refreshConn(); });
+        base.child('status').on('value', s => {
+            const d = s.val();
+            if (d) { status = { zoom: +d.zoom, max: +d.max, min: (+d.min > 0 ? +d.min : 1), canZoom: !!d.canZoom }; render(); }
+        });
+    } catch (e) { setDiag('Firebase 초기화 오류 — 설정(fb-config.js) 확인'); }
 }
 
-function connect() {   // 피어 새로 생성(최초/치명적 오류 시)
-    try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
-    conn = null;
-    setConn(false);
-    setDiag('시그널링 서버에 연결 중…');
-    const p = new Peer();
-    peer = p;
-    p.on('open', () => { if (p === peer) { setDiag('폰(앱)에 연결 중…'); openConn(true); } });
-    p.on('disconnected', () => { if (p === peer && !p.destroyed) { try { p.reconnect(); } catch (e) {} } });
-    p.on('error', err => {
-        if (p !== peer) return;   // 교체된 이전 피어의 에러는 무시(정상 피어를 다시 끊는 연쇄 방지)
-        setConn(false);
-        if (err && err.type === 'peer-unavailable') {   // 폰이 아직 ID 등록 전 → 피어 유지, 1초 뒤 재시도
-            conn = null;
-            setDiag('폰(앱)이 서버에 없어요 — 방송 중인지, 앱의 "원격 줌 허용"이 켜져 있는지 확인하세요 (자동 재시도 중)');
-            scheduleOpen(1000);
-        } else if (!retryPeer) {                        // 그 외 오류 → 피어 재생성(중복 예약 방지)
-            setDiag('서버 연결 오류(' + ((err && err.type) || '알 수 없음') + ') — 다시 시도 중…');
-            retryPeer = setTimeout(() => { retryPeer = null; if (p === peer) connect(); }, 2000);
-        }
-    });
-}
-
-// 하트비트(2초): 연결되어 있으면 ping, 6초간 응답 없거나 WebRTC가 죽었으면 즉시 재연결. 끊겼으면 재시도(협상 중이면 대기).
-function heartbeat() {
-    if (retryPeer) return;   // 피어 재생성 예약 중
-    if (!peer || peer.destroyed) { connect(); return; }
-    if (peer.disconnected) { try { peer.reconnect(); } catch (e) {} return; }
-    if (conn && conn.open) {
-        send({ type: 'ping' });
-        if (Date.now() - lastRx > 6000 || iceDead(conn)) { setConn(false); openConn(true); }
-    } else if (peer.open) {
-        if (conn && !conn.open) setDiag('폰(앱)에 연결 중… ' + Math.round((Date.now() - lastAttempt) / 1000) + '초');
-        openConn(false);
-    }
-}
-
-// 화면/앱 복귀(백그라운드 후): 즉시 점검 + 열린 연결은 2.5초 안에 응답 없으면 죽은 것으로 보고 재연결
-function onResume() {
-    heartbeat();
-    if (conn && conn.open) {
-        const t0 = Date.now();
-        send({ type: 'ping' });
-        setTimeout(() => { if (conn && conn.open && lastRx < t0) { setConn(false); openConn(true); } }, 2500);
-    }
-}
+// 화면/앱 복귀(백그라운드 후)·네트워크 복구 시: 연결 재시도(Firebase가 자동 재접속하지만 즉시 깨워 줌)
+function onResume() { try { if (db) db.goOnline(); } catch (e) {} refreshConn(); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) onResume(); });
+window.addEventListener('online', onResume);
+window.addEventListener('focus', onResume);
+window.addEventListener('pageshow', onResume);   // 뒤로가기 캐시(bfcache) 복원 대비
 
 // 누르고 있는 동안 STEP씩 반복
 function bindHold(id, dir) {
     const el = document.getElementById(id);
     let timer = null;
     const tick = () => send({ type: 'zoomBy', delta: dir * STEP });
-    const start = e => { e.preventDefault(); if (timer) return; el.classList.add('on'); tick(); timer = setInterval(tick, REPEAT_MS); };
+    const startHold = e => { e.preventDefault(); if (timer) return; el.classList.add('on'); tick(); timer = setInterval(tick, REPEAT_MS); };
     const stop = () => { if (timer) { clearInterval(timer); timer = null; } el.classList.remove('on'); };
-    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerdown', startHold);
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => el.addEventListener(ev, stop));
     window.addEventListener('blur', stop);
     document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
@@ -223,15 +170,8 @@ document.getElementById('btnAdd').addEventListener('click', () => {
 });
 document.getElementById('btnReset').addEventListener('click', () => { presets = DEFAULT_PRESETS.slice(); savePresets(); render(); });
 
-setInterval(heartbeat, 2000);
-// 화면 복귀/네트워크 복구 시 즉시 점검
-document.addEventListener('visibilitychange', () => { if (!document.hidden) onResume(); });
-window.addEventListener('online', onResume);
-window.addEventListener('focus', onResume);
-window.addEventListener('pageshow', onResume);   // 뒤로가기 캐시(bfcache) 복원 대비
-
 render();
-connect();
+start();
 </script>
 </body>
 </html>
