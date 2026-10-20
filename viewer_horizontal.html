@@ -100,7 +100,7 @@
     //  ?title=...   좌하단 대회명        ?logoA=URL  ?logoB=URL  팀 로고 이미지(없으면 글자 배지)
     //  ?demo=1      미리보기(샘플 값 + 배경)
     const Q = new URLSearchParams(location.search);
-    const MY_ID = Q.get('id') || 'jiho-papa-live-viewer';
+    const MY_ID = Q.get('id') || 'jiho-papa-live-viewer-h';   // 세로형(기본 ID)과 겹치지 않는 가로형 전용 기본 ID
     const LS_KEY = 'bdb_scoreboard_state';   // 기존 뷰어와 같은 키 → 뷰어를 바꿔도 점수/이름 유지
     const DEMO = !!window.DEMO || Q.get('demo') === '1';
     let peer = null;
@@ -276,6 +276,9 @@
         try { if (peer && !peer.destroyed) peer.destroy(); } catch (e) {}
     }
     window.addEventListener('pagehide', cleanupPeer);
+    // 앱(안드로이드)이 주기적으로 호출하는 상태 점검: PeerJS 서버에 ID가 등록되어 있고 끊기지 않았으면 true.
+    // 오래 false면 앱이 이 오버레이를 새로고침해 연결을 복구함.
+    window.bdbHealth = function () { return !!(peer && peer.open && !peer.disconnected && !peer.destroyed); };
     window.addEventListener('beforeunload', cleanupPeer);
 
     setInterval(() => {
