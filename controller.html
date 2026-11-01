@@ -187,6 +187,9 @@
                 <button class="btn-res hr" onclick="addGameRes('홈런')">홈런</button>
                 <button class="btn-res out-special" onclick="addGameRes('병살')">병살</button>
                 <button class="btn-res out-special" onclick="addGameRes('삼중살')">삼중살</button>
+
+                <button class="btn-res" onclick="addGameRes('희플')">희플</button>
+                <button class="btn-res" onclick="addGameRes('야선')">야선</button>
             </div>
             <button style="width:100%; background:#FF3B30; border:none; padding:10px; border-radius:5px; margin-top:10px; font-weight:bold; color:white; font-size:13px;" onclick="undoGameRes()">마지막 입력 취소</button>
         </div>
@@ -223,8 +226,8 @@
 
     const PLAYER_DB_KEY = 'bb_players_master';
     const DEFAULT_PLAYERS = {
-        "새싹": ["최지호", "양현준", "김재윤", "유하진", "홍현서", "손우진", "나라온", "김리호", "나라찬", "이승빈"],
-        "꿈나무": ["김영재", "정수안", "이선우", "김태훈", "홍현준", "전준휘", "노윤호", "신선우", "꿈나무9", "최지호", "김재윤", "유하진", "홍현서"],
+        "새싹": ["최지호", "양현준", "김재윤", "유하진", "나라온", "이승빈", "손우진", "김리호", "나라찬", "김재준", "박연우"],
+        "꿈나무": ["정수안", "김건호", "이선우", "전민국", "전준휘", "김영재", "신선우", "박승재", "박지원", "김재윤", "유하진", "최지호"],
         "유소년": ["최이안", "김지겸", "이승현", "박건희", "구도영", "이현성", "이준성", "신주호", "오종원"]
     };
 
