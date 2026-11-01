@@ -16,7 +16,7 @@
         /* 앱은 오버레이 페이지에서 '내용이 차지하는 영역(우/하단 최대값)'을 재서 박스 크기로 삼음(기존 스코어보드와 동일).
            → 바를 페이지 좌상단에 두고 바 크기만큼만 차지하게 함. 바 폭 = 화면폭의 97.6%, 높이 = 폭의 8.68%.
            앱에서 '100%'를 누르고 박스를 화면 하단으로 옮기면 됨(위치는 앱의 박스로 결정). */
-        .bar { position: fixed; left: 1.2vw; top: 0; width: 97.6vw; height: calc(97.6vw * 0.0868); display: flex; align-items: flex-end; }
+        .bar { position: fixed; left: 0; top: 0; width: 100vw; height: calc(97.6vw * 0.0868); display: flex; align-items: flex-end; }
 
         /* ── 좌측: 위(타자/투수 라인업) + 아래(대회명) ── */
         .left { flex: 0 0 21.8%; height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
@@ -25,6 +25,8 @@
         .title  { font-size: calc(var(--u) * 21); justify-content: center; white-space: nowrap; text-overflow: ellipsis; }
         #lineup-text { width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #lineup-text span { white-space: nowrap; }
+        /* 타석 기록(컨트롤러가 노란색 #FFD700으로 보냄): 흰 배경에선 안 보이므로 진한 파랑 + 조금 작게 */
+        #lineup-text span[style*="ffd700" i] { color: #1565C0 !important; font-size: 0.82em; }
 
         /* ── 우측: 팀A / 팀B / 이닝·베이스·카운트 (아래 한 줄) ── */
         .right { flex: 1; height: 50%; display: flex; align-items: stretch; }
