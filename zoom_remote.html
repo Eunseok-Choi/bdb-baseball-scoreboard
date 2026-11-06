@@ -18,6 +18,9 @@
   .holdRow { display: flex; gap: 12px; margin-bottom: 18px; }
   .hold { flex: 1; height: 96px; font-size: 40px; font-weight: 700; border: none; border-radius: 16px; background: #2a2a2a; color: #fff; }
   .hold:active, .hold.on { background: #0a84ff; }
+  .hold.step { height: 84px; font-size: 34px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; }
+  .hold.step small { font-size: 14px; font-weight: 400; color: #bbb; margin-top: 4px; min-height: 16px; }
+  .hold.step:disabled { opacity: .35; }
   #presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
   .preset { height: 56px; font-size: 18px; border: none; border-radius: 12px; background: #2a2a2a; color: #fff; position: relative; }
   .preset:active { background: #0a84ff; }
@@ -39,6 +42,12 @@
 
   <div id="zoomVal">--</div>
   <div id="maxInfo">최대 --x</div>
+
+  <!-- 프리셋 사이만 이동하는 ◀ ▶ (방향키처럼 한 번 누르면 이전/다음 프리셋 배율로 점프) -->
+  <div class="holdRow stepRow">
+    <button class="hold step" id="btnPrev">◀<small id="prevLbl"></small></button>
+    <button class="hold step" id="btnNext">▶<small id="nextLbl"></small></button>
+  </div>
 
   <div class="holdRow">
     <button class="hold" id="btnOut">−</button>
@@ -92,7 +101,36 @@ function refreshConn() {
     el.textContent = '연결됨'; el.className = 'ok'; setDiag('');
 }
 
+// ◀ ▶ 프리셋 이동: 현재 배율 기준 이전/다음 프리셋. 연속으로 빠르게 눌러도 앱 상태 회신을 기다리지 않도록
+// 직전에 보낸 목표 배율을 잠시(1.5초) 현재값으로 간주한다.
+let lastTarget = null, lastTargetAt = 0;
+function curZoom() { return (lastTarget !== null && Date.now() - lastTargetAt < 1500) ? lastTarget : status.zoom; }
+function sortedPresets() { return Array.from(new Set(presets)).sort((a, b) => a - b); }
+function neighbor(dir) {
+    const z = curZoom(), arr = sortedPresets();
+    if (dir > 0) return arr.find(p => p > z + 0.05);
+    for (let i = arr.length - 1; i >= 0; i--) if (arr[i] < z - 0.05) return arr[i];
+    return undefined;
+}
+function stepPreset(dir) {
+    const t = neighbor(dir);
+    if (t === undefined) return;
+    lastTarget = t; lastTargetAt = Date.now();
+    send({ type: 'zoomTo', value: t });
+    updateStepButtons();
+}
+function updateStepButtons() {
+    const p = neighbor(-1), n = neighbor(1);
+    document.getElementById('btnPrev').disabled = (p === undefined);
+    document.getElementById('btnNext').disabled = (n === undefined);
+    document.getElementById('prevLbl').textContent = p === undefined ? '' : p + 'x';
+    document.getElementById('nextLbl').textContent = n === undefined ? '' : n + 'x';
+}
+document.getElementById('btnPrev').addEventListener('click', () => stepPreset(-1));
+document.getElementById('btnNext').addEventListener('click', () => stepPreset(1));
+
 function render() {
+    updateStepButtons();
     document.getElementById('zoomVal').textContent = status.zoom.toFixed(1) + 'x';
     document.getElementById('maxInfo').textContent = (status.min < 1 ? '최소 ' + status.min.toFixed(1) + 'x · ' : '') + '최대 ' + status.max.toFixed(1) + 'x';
     say(status.canZoom ? '' : '현재 카메라 소스에서는 줌을 사용할 수 없습니다.');
